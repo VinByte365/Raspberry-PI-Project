@@ -1,38 +1,58 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, SafeAreaView } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { Ionicons } from '@expo/vector-icons';
+import * as ScreenOrientation from 'expo-screen-orientation';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
-// Replace this with your Raspberry Pi 5's actual network IP address
-const RASPI_IP = "192.168.100.137";
-const WS_URL = `ws://${RASPI_IP}:8765`;
-const SENSOR_API_URL = `http://${RASPI_IP}:5000/api/v1/sensors`;
+// Replace this with your Raspberry Pi 5's actual network IP address.
+const RASPI_IP = '192.168.100.51';
+const WS_URL = `ws://${RASPI_IP}:8766`;
 
 const RECONNECT_DELAY_MS = 3000;
 
-// ---------------------------------------------------------------------------
-// The WebView runs this HTML page in an isolated browser context.
-// It opens its OWN WebSocket to the Pi, receives binary frames, and draws
-// them directly onto a <canvas> — no React re-render, no image unmount/remount,
-// no flicker. It posts status messages back to React Native via postMessage.
-// ---------------------------------------------------------------------------
+type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'offline';
+type FitMode = 'fill' | 'fit';
+
 const STREAM_HTML = `<!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; background: #3A322D; overflow: hidden; }
-  canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #06090d;
+    overflow: hidden;
+  }
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #06090d;
+  }
   #placeholder {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    color: #EED6B3; font-family: sans-serif; font-size: 16px;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #d8e2ee;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 15px;
+    letter-spacing: 0;
   }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="placeholder">Connecting to Raspberry Pi...</div>
+<div id="placeholder">Connecting to camera...</div>
 <script>
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
@@ -40,239 +60,449 @@ const STREAM_HTML = `<!DOCTYPE html>
   const WS_URL = '${WS_URL}';
   const RECONNECT_DELAY_MS = ${RECONNECT_DELAY_MS};
 
-  function postStatus(connected) {
-    window.ReactNativeWebView.postMessage(connected ? 'connected' : 'disconnected');
+  let fitMode = 'fill';
+  let isPaused = false;
+  let lastImage = null;
+  let frameCount = 0;
+
+  function post(payload) {
+    window.ReactNativeWebView.postMessage(JSON.stringify(payload));
   }
 
+  function setPlaceholder(text, visible) {
+    placeholder.textContent = text;
+    placeholder.style.display = visible ? 'flex' : 'none';
+  }
+
+  function sizeCanvas() {
+    const scale = window.devicePixelRatio || 1;
+    const nextWidth = Math.max(1, Math.floor(canvas.clientWidth * scale));
+    const nextHeight = Math.max(1, Math.floor(canvas.clientHeight * scale));
+
+    if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
+      canvas.width = nextWidth;
+      canvas.height = nextHeight;
+      drawLastFrame();
+    }
+  }
+
+  function drawFrame(img) {
+    sizeCanvas();
+
+    const canvasRatio = canvas.width / canvas.height;
+    const imageRatio = img.naturalWidth / img.naturalHeight;
+    let drawWidth = canvas.width;
+    let drawHeight = canvas.height;
+
+    if (fitMode === 'fit') {
+      if (imageRatio > canvasRatio) {
+        drawHeight = canvas.width / imageRatio;
+      } else {
+        drawWidth = canvas.height * imageRatio;
+      }
+    } else if (imageRatio > canvasRatio) {
+      drawWidth = canvas.height * imageRatio;
+    } else {
+      drawHeight = canvas.width / imageRatio;
+    }
+
+    const x = (canvas.width - drawWidth) / 2;
+    const y = (canvas.height - drawHeight) / 2;
+
+    ctx.fillStyle = '#06090d';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, x, y, drawWidth, drawHeight);
+  }
+
+  function drawLastFrame() {
+    if (lastImage) {
+      drawFrame(lastImage);
+    }
+  }
+
+  function applyCommand(command) {
+    if (command.type === 'fitMode') {
+      fitMode = command.value === 'fit' ? 'fit' : 'fill';
+      drawLastFrame();
+    }
+
+    if (command.type === 'pause') {
+      isPaused = Boolean(command.value);
+      post({ type: 'paused', value: isPaused });
+    }
+  }
+
+  window.cameraControls = { applyCommand };
+  window.addEventListener('resize', sizeCanvas);
+
   function connect() {
+    post({ type: 'status', value: 'connecting' });
+    setPlaceholder('Connecting to camera...', true);
+
     const ws = new WebSocket(WS_URL);
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
-      postStatus(true);
-      placeholder.style.display = 'none';
+      post({ type: 'status', value: 'live' });
+      setPlaceholder('', false);
     };
 
     ws.onmessage = (event) => {
-      // Convert the raw binary frame into a Blob URL, draw it on canvas,
-      // then immediately revoke the URL — no DOM image nodes accumulate.
+      if (isPaused) {
+        return;
+      }
+
       const blob = new Blob([event.data], { type: 'image/jpeg' });
       const url = URL.createObjectURL(blob);
       const img = new Image();
+
       img.onload = () => {
-        // Size canvas to match the frame exactly (once, on first frame)
-        if (canvas.width !== img.naturalWidth) {
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-        }
-        ctx.drawImage(img, 0, 0);
+        lastImage = img;
+        frameCount += 1;
+        drawFrame(img);
+        post({ type: 'frame', value: frameCount });
         URL.revokeObjectURL(url);
       };
+
+      img.onerror = () => URL.revokeObjectURL(url);
       img.src = url;
     };
 
-    ws.onerror = () => postStatus(false);
+    ws.onerror = () => {
+      post({ type: 'status', value: 'offline' });
+    };
 
     ws.onclose = () => {
-      postStatus(false);
-      placeholder.textContent = 'Reconnecting...';
-      placeholder.style.display = 'flex';
+      post({ type: 'status', value: 'reconnecting' });
+      setPlaceholder('Reconnecting...', true);
       setTimeout(connect, RECONNECT_DELAY_MS);
     };
   }
 
+  sizeCanvas();
   connect();
 </script>
 </body>
 </html>`;
 
-export default function CrayfishStreamDashboard() {
-  const [stats, setStats] = useState({ temp: '--', ph: '--', filterStatus: 'Good' });
-  const [isConnected, setIsConnected] = useState(false);
+const statusCopy: Record<ConnectionState, string> = {
+  connecting: 'CONNECTING',
+  live: 'LIVE',
+  reconnecting: 'RECONNECTING',
+  offline: 'OFFLINE',
+};
 
-  // Receive connection status messages back from the WebView
-  const handleWebViewMessage = (event: any) => {
-    setIsConnected(event.nativeEvent.data === 'connected');
+const statusIcon: Record<ConnectionState, keyof typeof Ionicons.glyphMap> = {
+  connecting: 'sync',
+  live: 'radio',
+  reconnecting: 'refresh',
+  offline: 'alert-circle',
+};
+
+export default function CrayfishStreamDashboard() {
+  const webViewRef = useRef<WebView>(null);
+  const [connectionState, setConnectionState] =
+    useState<ConnectionState>('connecting');
+  const [fitMode, setFitMode] = useState<FitMode>('fill');
+  const [isPaused, setIsPaused] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [frameCount, setFrameCount] = useState(0);
+
+  const sendWebViewCommand = useCallback((command: object) => {
+    const script = `
+      window.cameraControls?.applyCommand(${JSON.stringify(command)});
+      true;
+    `;
+    webViewRef.current?.injectJavaScript(script);
+  }, []);
+
+  const toggleFitMode = useCallback(() => {
+    setFitMode((currentMode) => {
+      const nextMode = currentMode === 'fill' ? 'fit' : 'fill';
+      sendWebViewCommand({ type: 'fitMode', value: nextMode });
+      return nextMode;
+    });
+  }, [sendWebViewCommand]);
+
+  const togglePause = useCallback(() => {
+    setIsPaused((currentValue) => {
+      const nextValue = !currentValue;
+      sendWebViewCommand({ type: 'pause', value: nextValue });
+      return nextValue;
+    });
+  }, [sendWebViewCommand]);
+
+  const enterFullscreen = useCallback(async () => {
+    setIsFullscreen(true);
+    await ScreenOrientation.lockAsync(
+      ScreenOrientation.OrientationLock.LANDSCAPE,
+    );
+  }, []);
+
+  const exitFullscreen = useCallback(async () => {
+    setIsFullscreen(false);
+    await ScreenOrientation.lockAsync(
+      ScreenOrientation.OrientationLock.PORTRAIT_UP,
+    );
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      ScreenOrientation.lockAsync(
+        ScreenOrientation.OrientationLock.PORTRAIT_UP,
+      ).catch(() => undefined);
+    };
+  }, []);
+
+  const handleWebViewMessage = (event: WebViewMessageEvent) => {
+    try {
+      const message = JSON.parse(event.nativeEvent.data);
+
+      if (message.type === 'status') {
+        setConnectionState(message.value);
+      }
+
+      if (message.type === 'frame') {
+        setFrameCount(message.value);
+      }
+    } catch {
+      setConnectionState(
+        event.nativeEvent.data === 'connected' ? 'live' : 'offline',
+      );
+    }
   };
 
-  // Poll Environment Metrics from HTTP API
-  useEffect(() => {
-    const fetchStats = () => {
-      fetch(SENSOR_API_URL)
-        .then(res => res.json())
-        .then(data => setStats(data))
-        .catch(err => {
-          console.error("Error fetching sensor data from Pi:", err);
-          setStats({ temp: 'Offline', ph: 'Offline', filterStatus: 'Offline' });
-        });
-    };
+  const video = (
+    <WebView
+      ref={webViewRef}
+      style={styles.webview}
+      source={{ html: STREAM_HTML }}
+      onMessage={handleWebViewMessage}
+      originWhitelist={['*']}
+      allowsInlineMediaPlayback
+      mediaPlaybackRequiresUserAction={false}
+    />
+  );
 
-    fetchStats();
-    const interval = setInterval(fetchStats, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  const statusPill = (
+    <View
+      style={[
+        styles.statusPill,
+        connectionState === 'live' ? styles.livePill : styles.offlinePill,
+      ]}
+    >
+      <Ionicons
+        name={statusIcon[connectionState]}
+        size={14}
+        color={connectionState === 'live' ? '#9ff7c2' : '#f8c6bd'}
+      />
+      <Text style={styles.statusText}>{statusCopy[connectionState]}</Text>
+    </View>
+  );
+
+  const controls = (
+    <View style={styles.controls}>
+      <IconButton
+        icon={fitMode === 'fill' ? 'expand' : 'contract'}
+        label={fitMode === 'fill' ? 'Fill' : 'Fit'}
+        onPress={toggleFitMode}
+      />
+      <IconButton
+        icon={isPaused ? 'play' : 'pause'}
+        label={isPaused ? 'Resume' : 'Pause'}
+        onPress={togglePause}
+      />
+      <IconButton
+        icon={isFullscreen ? 'contract' : 'scan'}
+        label={isFullscreen ? 'Exit' : 'Full'}
+        onPress={isFullscreen ? exitFullscreen : enterFullscreen}
+      />
+    </View>
+  );
+
+  if (isFullscreen) {
+    return (
+      <View style={styles.fullscreenPage}>
+        <View style={styles.fullscreenVideo}>{video}</View>
+        <View style={styles.fullscreenOverlay}>
+          {statusPill}
+          {controls}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.page}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-
-        {/* Header Banner */}
-        <View style={styles.header}>
-          <View style={styles.logoRow}>
-            <Text style={styles.logo}>🦞 ClawCam</Text>
-            <View style={[styles.badge, isConnected ? styles.liveBadge : styles.offlineBadge]}>
-              <Text style={styles.badgeText}>{isConnected ? 'LIVE' : 'OFFLINE'}</Text>
-            </View>
-          </View>
-          <Text style={styles.tagline}>Real-time viewing of the crayfish habitat</Text>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.logo}>ClawCam</Text>
+          <Text style={styles.tagline}>Raspberry Pi live camera feed</Text>
         </View>
+        {statusPill}
+      </View>
 
-        {/* Video Player — WebView draws frames onto a canvas, no flicker */}
-        <View style={styles.videoWrapper}>
-          <WebView
-            style={styles.webview}
-            source={{ html: STREAM_HTML }}
-            onMessage={handleWebViewMessage}
-            // Required for WebSockets and Blob URLs to work inside the WebView
-            originWhitelist={['*']}
-            allowsInlineMediaPlayback
-            mediaPlaybackRequiresUserAction={false}
-            // Transparent background so the dark videoWrapper shows through
-            // before the first frame arrives
-            backgroundColor="transparent"
-          />
+      <View style={styles.videoWrapper}>{video}</View>
+
+      <View style={styles.panel}>
+        <View>
+          <Text style={styles.panelTitle}>Camera</Text>
+          <Text style={styles.panelMeta}>
+            {isPaused ? 'Rendering paused' : `${frameCount} frames received`}
+          </Text>
         </View>
-
-        {/* Environmental Telemetry Metrics */}
-        <View style={styles.statsCard}>
-          <Text style={styles.statsTitle}>Tank Environment</Text>
-          <Text style={styles.statsSubtitle}>Telemetry powered by Raspberry Pi 5</Text>
-
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Water Temperature</Text>
-            <Text style={styles.statValue}>{stats.temp}°C</Text>
-          </View>
-
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>pH Balance</Text>
-            <Text style={styles.statValue}>{stats.ph}</Text>
-          </View>
-
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Filtration System</Text>
-            <Text style={[styles.statValue, { color: '#4A7A56' }]}>
-              {stats.filterStatus}
-            </Text>
-          </View>
-        </View>
-
-      </ScrollView>
+        {controls}
+      </View>
     </SafeAreaView>
+  );
+}
+
+type IconButtonProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+};
+
+function IconButton({ icon, label, onPress }: IconButtonProps) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.iconButton,
+        pressed && styles.iconButtonPressed,
+      ]}
+    >
+      <Ionicons name={icon} size={20} color="#e8f1fb" />
+      <Text style={styles.iconButtonText}>{label}</Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   page: {
     flex: 1,
-    backgroundColor: '#FAF6F0',
-  },
-  scrollContainer: {
-    padding: 24,
+    backgroundColor: '#10151b',
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 20,
   },
   header: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#EED6B3',
-    paddingBottom: 20,
-    marginBottom: 24,
-  },
-  logoRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 18,
   },
   logo: {
-    color: '#D35230',
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginRight: 10,
-  },
-  badge: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  liveBadge: {
-    backgroundColor: '#D35230',
-  },
-  offlineBadge: {
-    backgroundColor: '#7A6E67',
-  },
-  badgeText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
+    color: '#f2f7fb',
+    fontSize: 27,
+    fontWeight: '800',
   },
   tagline: {
-    color: '#6E6259',
-    fontSize: 14,
+    color: '#98a8b8',
+    fontSize: 13,
+    marginTop: 3,
+  },
+  statusPill: {
+    alignItems: 'center',
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 32,
+    paddingHorizontal: 10,
+  },
+  livePill: {
+    backgroundColor: '#123824',
+    borderColor: '#26764c',
+    borderWidth: 1,
+  },
+  offlinePill: {
+    backgroundColor: '#3b201e',
+    borderColor: '#814139',
+    borderWidth: 1,
+  },
+  statusText: {
+    color: '#f3f8fc',
+    fontSize: 11,
+    fontWeight: '800',
   },
   videoWrapper: {
-    backgroundColor: '#3A322D',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#EED6B3',
     aspectRatio: 16 / 9,
-    marginBottom: 24,
-    shadowColor: '#3A322D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
+    backgroundColor: '#06090d',
+    borderColor: '#263442',
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
   webview: {
     flex: 1,
     backgroundColor: 'transparent',
   },
-  statsCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 20,
+  panel: {
+    alignItems: 'center',
+    backgroundColor: '#18212a',
+    borderColor: '#263442',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#EED6B3',
-    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    padding: 12,
   },
-  statsTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#3A322D',
-    marginBottom: 2,
+  panelTitle: {
+    color: '#f2f7fb',
+    fontSize: 15,
+    fontWeight: '800',
   },
-  statsSubtitle: {
-    fontSize: 13,
-    color: '#8E8073',
-    marginBottom: 16,
-  },
-  statBox: {
-    backgroundColor: '#FFF9F2',
-    padding: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#F3E4D0',
-    marginBottom: 12,
-  },
-  statLabel: {
+  panelMeta: {
+    color: '#8ea0b2',
     fontSize: 12,
-    fontWeight: '600',
-    color: '#6E6259',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
+    marginTop: 3,
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#D35230',
-  }
+  controls: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  iconButton: {
+    alignItems: 'center',
+    backgroundColor: '#243342',
+    borderColor: '#33495c',
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 54,
+    justifyContent: 'center',
+    minWidth: 58,
+    paddingHorizontal: 9,
+  },
+  iconButtonPressed: {
+    backgroundColor: '#2f4558',
+  },
+  iconButtonText: {
+    color: '#d8e2ee',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 3,
+  },
+  fullscreenPage: {
+    backgroundColor: '#020406',
+    flex: 1,
+  },
+  fullscreenVideo: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  fullscreenOverlay: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    left: 16,
+    position: 'absolute',
+    right: 16,
+    top: 16,
+  },
 });

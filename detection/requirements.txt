@@ -1,0 +1,5 @@
+websockets
+opencv-python
+numpy
+inference-sdk
+python-dotenv
