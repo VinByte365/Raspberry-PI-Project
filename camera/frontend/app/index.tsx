@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
+// WebSocket bridge URL for sensor data (bridge subscribes to MQTT on the Pi)
+const SENSOR_WS_URL = `ws://${RASPI_IP}:8767`;
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Pressable,
@@ -13,11 +15,28 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 // Replace this with your Raspberry Pi 5's actual network IP address.
 const RASPI_IP = '192.168.100.159';
 const WS_URL = `ws://${RASPI_IP}:8766`;
+const MQTT_WS_URL = `ws://${RASPI_IP}:9001`;
 
 const RECONNECT_DELAY_MS = 3000;
 
 type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'offline';
 type FitMode = 'fill' | 'fit';
+
+type SensorState = {
+  turbidity: string;
+  tds: string;
+  ph: string;
+  mq135: string;
+  tof: string;
+};
+
+const MQTT_TOPICS = [
+  'sensors/water/turbidity',
+  'sensors/water/tds',
+  'sensors/water/ph',
+  'sensors/air/ppm',
+  'sensors/water/distance',
+];
 
 const STREAM_HTML = `<!DOCTYPE html>
 <html>
@@ -207,6 +226,14 @@ export default function CrayfishStreamDashboard() {
   const [isPaused, setIsPaused] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [frameCount, setFrameCount] = useState(0);
+  const [mqttConnected, setMqttConnected] = useState(false);
+  const [sensorState, setSensorState] = useState<SensorState>({
+    turbidity: '—',
+    tds: '—',
+    ph: '—',
+    mq135: '—',
+    tof: '—',
+  });
 
   const sendWebViewCommand = useCallback((command: object) => {
     const script = `
@@ -231,6 +258,62 @@ export default function CrayfishStreamDashboard() {
       return nextValue;
     });
   }, [sendWebViewCommand]);
+
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(SENSOR_WS_URL);
+    } catch (e) {
+      console.warn('[SENSOR WS] Failed to create WebSocket', e);
+      return;
+    }
+
+    ws.onopen = () => {
+      setMqttConnected(true);
+      console.log('[SENSOR WS] Connected');
+    };
+
+    ws.onclose = () => {
+      setMqttConnected(false);
+      console.log('[SENSOR WS] Closed');
+    };
+
+    ws.onerror = (err) => {
+      setMqttConnected(false);
+      console.warn('[SENSOR WS] Error', err);
+    };
+
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        const topic = msg.topic as string;
+        const payload = String(msg.payload);
+
+        setSensorState((current) => {
+          switch (topic) {
+            case 'sensors/water/turbidity':
+              return { ...current, turbidity: payload };
+            case 'sensors/water/tds':
+              return { ...current, tds: payload };
+            case 'sensors/water/ph':
+              return { ...current, ph: payload };
+            case 'sensors/air/ppm':
+              return { ...current, mq135: payload };
+            case 'sensors/water/distance':
+              return { ...current, tof: payload };
+            default:
+              return current;
+          }
+        });
+      } catch (err) {
+        console.warn('[SENSOR WS] Bad message', err, ev.data);
+      }
+    };
+
+    return () => {
+      if (ws) ws.close();
+    };
+  }, []);
 
   const enterFullscreen = useCallback(async () => {
     setIsFullscreen(true);
@@ -344,6 +427,23 @@ export default function CrayfishStreamDashboard() {
 
       <View style={styles.videoWrapper}>{video}</View>
 
+      <View style={styles.sensorPanel}>
+        <View style={styles.sensorHeader}>
+          <Text style={styles.panelTitle}>ESP32 Sensor Readings</Text>
+          <Text style={styles.panelMeta}>
+            MQTT {mqttConnected ? 'CONNECTED' : 'DISCONNECTED'}
+          </Text>
+        </View>
+
+        <View style={styles.sensorGrid}>
+          <SensorStat label="Turbidity" value={sensorState.turbidity} unit="ADC" />
+          <SensorStat label="TDS" value={sensorState.tds} unit="ppm" />
+          <SensorStat label="pH" value={sensorState.ph} unit="" />
+          <SensorStat label="MQ135" value={sensorState.mq135} unit="ppm" />
+          <SensorStat label="TOF" value={sensorState.tof} unit="mm" />
+        </View>
+      </View>
+
       <View style={styles.panel}>
         <View>
           <Text style={styles.panelTitle}>Camera</Text>
@@ -362,6 +462,24 @@ type IconButtonProps = {
   label: string;
   onPress: () => void;
 };
+
+function SensorStat({
+  label,
+  value,
+  unit,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+}) {
+  return (
+    <View style={styles.sensorStat}>
+      <Text style={styles.sensorLabel}>{label}</Text>
+      <Text style={styles.sensorValue}>{value}</Text>
+      {unit ? <Text style={styles.sensorUnit}>{unit}</Text> : null}
+    </View>
+  );
+}
 
 function IconButton({ icon, label, onPress }: IconButtonProps) {
   return (
@@ -438,6 +556,50 @@ const styles = StyleSheet.create({
   webview: {
     flex: 1,
     backgroundColor: 'transparent',
+  },
+  sensorPanel: {
+    backgroundColor: '#18212a',
+    borderColor: '#263442',
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 14,
+    padding: 14,
+  },
+  sensorHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sensorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  sensorStat: {
+    backgroundColor: '#0f1b24',
+    borderColor: '#1f3748',
+    borderRadius: 10,
+    borderWidth: 1,
+    minWidth: '48%',
+    padding: 12,
+  },
+  sensorLabel: {
+    color: '#8ea0b2',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  sensorValue: {
+    color: '#f6fbff',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  sensorUnit: {
+    color: '#6da3c7',
+    fontSize: 12,
+    marginTop: 4,
   },
   panel: {
     alignItems: 'center',
