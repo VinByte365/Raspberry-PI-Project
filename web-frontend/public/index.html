@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor Dashboard - Real-Time Monitoring</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+                sans-serif;
+            -webkit-font-smoothing: antialiased;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #60a5fa, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-subtitle {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.1em;
+            color: #94a3b8;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            font-size: 0.9em;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: #10b981;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+
+        .status-dot.disconnected {
+            background: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .control-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .control-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+        }
+
+        .control-btn:active {
+            transform: translateY(0);
+        }
+
+        .control-btn.active {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .sensor-card {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .sensor-card:hover {
+            border-color: #475569;
+            background: rgba(30, 41, 59, 0.95);
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .sensor-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .sensor-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #cbd5e1;
+        }
+
+        .sensor-icon {
+            font-size: 1.5em;
+        }
+
+        .sensor-value {
+            font-size: 2.5em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #60a5fa, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .sensor-unit {
+            font-size: 0.9em;
+            color: #94a3b8;
+            margin-top: 5px;
+        }
+
+        .sensor-status {
+            padding-top: 10px;
+            border-top: 1px solid #475569;
+            margin-top: 10px;
+            font-size: 0.85em;
+            color: #64748b;
+        }
+
+        .warning {
+            background: rgba(239, 68, 68, 0.1);
+            border-left: 4px solid #ef4444;
+            padding: 15px;
+            border-radius: 6px;
+            color: #fca5a5;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .warning.show {
+            display: block;
+        }
+
+        .relay-section {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+        }
+
+        .relay-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .relay-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .relay-control {
+            padding: 15px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 2px solid #475569;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .relay-control:hover {
+            border-color: #64748b;
+        }
+
+        .relay-control.on {
+            background: rgba(16, 185, 129, 0.2);
+            border-color: #10b981;
+        }
+
+        .relay-name {
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .relay-toggle {
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+            background: #475569;
+            border-radius: 13px;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .relay-control.on .relay-toggle {
+            background: #10b981;
+        }
+
+        .relay-toggle::after {
+            content: '';
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .relay-control.on .relay-toggle::after {
+            left: 26px;
+        }
+
+        .stats {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            margin-top: 30px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 8px;
+            border-left: 3px solid #3b82f6;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #94a3b8;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: #60a5fa;
+        }
+
+        .timestamp {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 0.85em;
+            color: #64748b;
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid #ef4444;
+            border-radius: 8px;
+            padding: 15px;
+            color: #fca5a5;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .sensor-value {
+                font-size: 2em;
+            }
+
+            .controls {
+                flex-direction: column;
+            }
+
+            .control-btn {
+                width: 100%;
+            }
+        }
+
+        .chart-container {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+            margin-top: 30px;
+        }
+
+        .chart-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌊 Sensor Dashboard</h1>
+            <div class="header-subtitle">
+                <span class="status-indicator">
+                    <span class="status-dot disconnected" id="statusDot"></span>
+                    <span id="connectionStatus">Connecting...</span>
+                </span>
+            </div>
+        </header>
+
+        <div class="controls">
+            <button class="control-btn" id="refreshBtn">🔄 Refresh</button>
+            <button class="control-btn" id="exportBtn">📥 Export Data</button>
+            <button class="control-btn" id="clearBtn">🗑️ Clear Alerts</button>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+        <div class="warning" id="alertsWarning"></div>
+
+        <div class="grid">
+            <div class="sensor-card">
+                <div class="sensor-header">
+                    <span class="sensor-title">💧 Turbidity</span>
+                    <span class="sensor-icon">≈</span>
+                </div>
+                <div class="sensor-value" id="turbidityValue">--</div>
+                <div class="sensor-unit">Raw ADC Value</div>
+                <div class="sensor-status">
+                    <div>Status: <span id="turbidityStatus">--</span></div>
+                </div>
+            </div>
+
+            <div class="sensor-card">
+                <div class="sensor-header">
+                    <span class="sensor-title">🧂 TDS (Dissolved Solids)</span>
+                    <span class="sensor-icon">≈</span>
+                </div>
+                <div class="sensor-value" id="tdsValue">--</div>
+                <div class="sensor-unit">ppm (parts per million)</div>
+                <div class="sensor-status">
+                    <div>Status: <span id="tdsStatus">--</span></div>
+                </div>
+            </div>
+
+            <div class="sensor-card">
+                <div class="sensor-header">
+                    <span class="sensor-title">💨 MQ135 Gas</span>
+                    <span class="sensor-icon">☁️</span>
+                </div>
+                <div class="sensor-value" id="mqValue">--</div>
+                <div class="sensor-unit">ppm (air quality)</div>
+                <div class="sensor-status">
+                    <div>Status: <span id="mqStatus">--</span></div>
+                </div>
+            </div>
+
+            <div class="sensor-card">
+                <div class="sensor-header">
+                    <span class="sensor-title">📊 pH Level</span>
+                    <span class="sensor-icon">⚗️</span>
+                </div>
+                <div class="sensor-value" id="phValue">--</div>
+                <div class="sensor-unit">pH (0-14 scale)</div>
+                <div class="sensor-status">
+                    <div>Status: <span id="phStatus">--</span></div>
+                </div>
+            </div>
+
+            <div class="sensor-card">
+                <div class="sensor-header">
+                    <span class="sensor-title">📏 Distance (TOF)</span>
+                    <span class="sensor-icon">📡</span>
+                </div>
+                <div class="sensor-value" id="tofValue">--</div>
+                <div class="sensor-unit">mm</div>
+                <div class="sensor-status">
+                    <div>Status: <span id="tofStatus">--</span></div>
+                </div>
+            </div>
+
+            <div class="sensor-card">
+                <div class="sensor-header">
+                    <span class="sensor-title">⚙️ System Info</span>
+                    <span class="sensor-icon">ℹ️</span>
+                </div>
+                <div class="sensor-value" style="font-size: 1.5em;">--</div>
+                <div class="sensor-unit">Last Update</div>
+                <div class="sensor-status">
+                    <div id="systemInfo">--</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="relay-section">
+            <div class="relay-title">🎛️ Relay Controls</div>
+            <div class="relay-controls">
+                <div class="relay-control" id="pumpRelay" onclick="toggleRelay('pump')">
+                    <div class="relay-name">💧 Pump</div>
+                    <div class="relay-toggle"></div>
+                </div>
+                <div class="relay-control" id="solenoidRelay" onclick="toggleRelay('solenoid')">
+                    <div class="relay-name">🚰 Solenoid</div>
+                    <div class="relay-toggle"></div>
+                </div>
+                <div class="relay-control" id="uvRelay" onclick="toggleRelay('uv')">
+                    <div class="relay-name">☀️ UV Light</div>
+                    <div class="relay-toggle"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-label">Connected Clients</div>
+                    <div class="stat-value" id="clientCount">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Updates/Min</div>
+                    <div class="stat-value" id="updateRate">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Last Update</div>
+                    <div class="stat-value" id="lastUpdate">--</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Connection Status</div>
+                    <div class="stat-value" id="serialStatus">Offline</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="timestamp" id="timestamp"></div>
+    </div>
+
+    <script>
+        // WebSocket Configuration
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsURL = `${protocol}//${window.location.host}`;
+        let ws = null;
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 10;
+        let updateCount = 0;
+        let lastUpdateTime = Date.now();
+
+        // Alert thresholds
+        const THRESHOLDS = {
+            turbidity: { dirty: 500, clean: 2000 },
+            tds: { warning: 100 },
+            mq135: { warning: 85 },
+            ph: { acidic: 6.0, alkaline: 7.59 }
+        };
+
+        let alerts = [];
+
+        function connectWebSocket() {
+            console.log('Connecting to WebSocket...');
+            ws = new WebSocket(wsURL);
+
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                reconnectAttempts = 0;
+                updateConnectionStatus(true);
+                requestSensorStatus();
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    
+                    if (message.type === 'sensor_update') {
+                        updateDashboard(message.data);
+                        updateCount++;
+                    }
+                } catch (error) {
+                    console.error('Error parsing message:', error);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                updateConnectionStatus(false);
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                updateConnectionStatus(false);
+                attemptReconnect();
+            };
+        }
+
+        function attemptReconnect() {
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                reconnectAttempts++;
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 30000);
+                console.log(`Attempting reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+                setTimeout(connectWebSocket, delay);
+            } else {
+                showError('Failed to connect after multiple attempts. Please refresh the page.');
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const dot = document.getElementById('statusDot');
+            const status = document.getElementById('connectionStatus');
+            
+            if (connected) {
+                dot.classList.remove('disconnected');
+                dot.classList.add('connected');
+                status.textContent = '🟢 Connected';
+            } else {
+                dot.classList.remove('connected');
+                dot.classList.add('disconnected');
+                status.textContent = '🔴 Disconnected';
+            }
+        }
+
+        function updateDashboard(data) {
+            // Update sensor values
+            document.getElementById('turbidityValue').textContent = data.turbidity.toFixed(0);
+            document.getElementById('tdsValue').textContent = data.tds.toFixed(1);
+            document.getElementById('mqValue').textContent = data.mq135.toFixed(1);
+            document.getElementById('phValue').textContent = data.ph.toFixed(2);
+            document.getElementById('tofValue').textContent = data.tof.toFixed(0);
+
+            // Update sensor status
+            updateSensorStatus('turbidity', data.turbidity);
+            updateSensorStatus('tds', data.tds);
+            updateSensorStatus('mq135', data.mq135);
+            updateSensorStatus('ph', data.ph);
+
+            // Update relay states
+            updateRelayUI('pump', data.relay_pump);
+            updateRelayUI('solenoid', data.relay_solenoid);
+            updateRelayUI('uv', data.relay_uv);
+
+            // Update system info
+            if (data.timestamp) {
+                const date = new Date(data.timestamp);
+                document.getElementById('lastUpdate').textContent = date.toLocaleTimeString();
+                document.getElementById('systemInfo').innerHTML = `Updated: ${date.toLocaleTimeString()}<br>Connected: ${data.connected ? '✅' : '❌'}`;
+            }
+
+            document.getElementById('serialStatus').textContent = data.connected ? 'Online' : 'Offline';
+            
+            if (data.error) {
+                showError(`Serial Error: ${data.error}`);
+            }
+
+            updateTimestamp();
+        }
+
+        function updateSensorStatus(sensor, value) {
+            const statusEl = document.getElementById(`${sensor}Status`);
+            let status = '✅ Normal';
+
+            switch (sensor) {
+                case 'turbidity':
+                    if (value <= THRESHOLDS.turbidity.dirty) status = '🔴 DIRTY - Action Required';
+                    else if (value >= THRESHOLDS.turbidity.clean) status = '✅ Clean';
+                    else status = '🟡 Cleaning...';
+                    break;
+                case 'tds':
+                    if (value >= THRESHOLDS.tds.warning) status = '⚠️ High TDS Alert';
+                    break;
+                case 'mq135':
+                    if (value >= THRESHOLDS.mq135.warning) status = '⚠️ Poor Air Quality';
+                    break;
+                case 'ph':
+                    if (value <= THRESHOLDS.ph.acidic) status = '🔴 Very Acidic';
+                    else if (value >= THRESHOLDS.ph.alkaline) status = '🔴 Very Alkaline';
+                    else status = '✅ Balanced';
+                    break;
+            }
+
+            statusEl.textContent = status;
+        }
+
+        function updateRelayUI(relay, state) {
+            const element = document.getElementById(`${relay}Relay`);
+            if (state) {
+                element.classList.add('on');
+            } else {
+                element.classList.remove('on');
+            }
+        }
+
+        function toggleRelay(relay) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const element = document.getElementById(`${relay}Relay`);
+                const newState = !element.classList.contains('on');
+                
+                ws.send(JSON.stringify({
+                    type: 'relay_control',
+                    payload: `${relay.toUpperCase()}:${newState ? '1' : '0'}`
+                }));
+            } else {
+                showError('WebSocket not connected');
+            }
+        }
+
+        function requestSensorStatus() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'request_status' }));
+            }
+        }
+
+        function updateTimestamp() {
+            const now = new Date();
+            document.getElementById('timestamp').textContent = `Last update: ${now.toLocaleString()}`;
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = `⚠️ ${message}`;
+            errorDiv.classList.add('show');
+            setTimeout(() => {
+                errorDiv.classList.remove('show');
+            }, 5000);
+        }
+
+        // Event Listeners
+        document.getElementById('refreshBtn').addEventListener('click', requestSensorStatus);
+        
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            const data = {
+                timestamp: new Date().toISOString(),
+                turbidity: document.getElementById('turbidityValue').textContent,
+                tds: document.getElementById('tdsValue').textContent,
+                mq135: document.getElementById('mqValue').textContent,
+                ph: document.getElementById('phValue').textContent,
+                tof: document.getElementById('tofValue').textContent
+            };
+            
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `sensor-data-${new Date().getTime()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            document.getElementById('alertsWarning').classList.remove('show');
+            alerts = [];
+        });
+
+        // Update connection stats every second
+        setInterval(() => {
+            const now = Date.now();
+            const secondsElapsed = (now - lastUpdateTime) / 1000;
+            if (secondsElapsed > 0) {
+                const rate = Math.round((updateCount / secondsElapsed) * 60);
+                document.getElementById('updateRate').textContent = rate;
+            }
+        }, 1000);
+
+        // Initialize
+        connectWebSocket();
+    </script>
+</body>
+</html>

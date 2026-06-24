@@ -1,0 +1,22 @@
+[Unit]
+Description=Sensor Dashboard WebSocket Server
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/Raspberry-PI-Project/web-frontend
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment="NODE_ENV=production"
+Environment="SERIAL_PORT=/dev/ttyUSB0"
+Environment="SERIAL_BAUD=115200"
+Environment="WS_PORT=8080"
+
+[Install]
+WantedBy=multi-user.target

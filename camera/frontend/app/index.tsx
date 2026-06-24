@@ -11,7 +11,7 @@ import {
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 // Replace this with your Raspberry Pi 5's actual network IP address.
-const RASPI_IP = '192.168.100.51';
+const RASPI_IP = '192.168.100.159';
 const WS_URL = `ws://${RASPI_IP}:8766`;
 
 const RECONNECT_DELAY_MS = 3000;
