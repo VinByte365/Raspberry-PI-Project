@@ -3,9 +3,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const cors = require('cors');
 const path = require('path');
-const net = require('net');
 const mqtt = require('mqtt');
-const aedes = require('aedes');
 const sqlite3 = require('sqlite3').verbose();
 require('dotenv').config();
 
@@ -109,33 +107,17 @@ let parser = null;
 let isConnected = false;
 let mqttClient = null;
 let mqttConnected = false;
-let embeddedBroker = null;
-let embeddedBrokerServer = null;
-
-function startEmbeddedBroker() {
-  if (embeddedBrokerServer) {
-    return;
-  }
-
-  embeddedBroker = aedes();
-  embeddedBrokerServer = net.createServer(embeddedBroker.handle);
-  embeddedBrokerServer.listen(MQTT_PORT, '0.0.0.0', () => {
-    console.log(`[MQTT] Embedded broker listening on 0.0.0.0:${MQTT_PORT}`);
-  });
-}
 
 function initializeMqttClient() {
   if (mqttClient) {
     return;
   }
 
-  const shouldUseLocalBroker = ['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(MQTT_BROKER);
-  if (shouldUseLocalBroker) {
-    startEmbeddedBroker();
-  }
-
+  // NOTE: This connects to an EXISTING MQTT broker (e.g. Mosquitto running
+  // as a system service on the Pi at localhost:1883). It does NOT start its
+  // own broker — Mosquitto already owns port 1883, so we just act as a client.
   const mqttOptions = {
-    host: shouldUseLocalBroker ? '127.0.0.1' : MQTT_BROKER,
+    host: MQTT_BROKER,
     port: MQTT_PORT,
     protocol: 'mqtt',
     keepalive: 60,
@@ -283,7 +265,7 @@ wss.on('connection', (ws) => {
   ws.on('message', (message) => {
     try {
       const parsedMessage = JSON.parse(message);
-      
+
       if (parsedMessage.type === 'ping') {
         ws.send(JSON.stringify({ type: 'pong' }));
       } else if (parsedMessage.type === 'request_status') {
@@ -388,15 +370,15 @@ server.listen(WS_PORT, '0.0.0.0', () => {
   console.log(`========================================`);
   console.log(`📡 WebSocket Server: ws://0.0.0.0:${WS_PORT}`);
   console.log(`🌐 HTTP Server: http://localhost:${WS_PORT}`);
-  console.log(`� MQTT Broker: ${MQTT_BROKER}:${MQTT_PORT}`);
-  console.log(`�📊 Serial Port: ${SERIAL_PORT} @ ${SERIAL_BAUD} baud`);
+  console.log(`📶 MQTT Broker: ${MQTT_BROKER}:${MQTT_PORT}`);
+  console.log(`📊 Serial Port: ${SERIAL_PORT} @ ${SERIAL_BAUD} baud`);
   console.log(`========================================\n`);
 });
 
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\n[System] Shutting down gracefully...');
-  
+
   if (serialPort && isConnected) {
     serialPort.close(() => {
       console.log('[Serial Port] Closed');
@@ -407,9 +389,9 @@ process.on('SIGINT', () => {
     client.close();
   });
 
-  if (embeddedBrokerServer) {
-    embeddedBrokerServer.close(() => {
-      console.log('[MQTT] Embedded broker closed');
+  if (mqttClient) {
+    mqttClient.end(true, () => {
+      console.log('[MQTT] Client disconnected');
     });
   }
 
