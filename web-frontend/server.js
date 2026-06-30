@@ -3,6 +3,10 @@ const http = require('http');
 const WebSocket = require('ws');
 const cors = require('cors');
 const path = require('path');
+const net = require('net');
+const mqtt = require('mqtt');
+const aedes = require('aedes');
+const sqlite3 = require('sqlite3').verbose();
 require('dotenv').config();
 
 // Try to load serialport, gracefully handle if not available
@@ -25,11 +29,59 @@ const SERIAL_PORT = process.env.SERIAL_PORT || 'COM3';
 const SERIAL_BAUD = parseInt(process.env.SERIAL_BAUD || '115200');
 const WS_PORT = process.env.WS_PORT || 8080;
 const SENSOR_UPDATE_INTERVAL = parseInt(process.env.SENSOR_UPDATE_INTERVAL || '500');
+const MQTT_BROKER = process.env.MQTT_BROKER || 'localhost';
+const MQTT_PORT = parseInt(process.env.MQTT_PORT || '1883');
+const MQTT_USERNAME = process.env.MQTT_USERNAME || '';
+const MQTT_PASSWORD = process.env.MQTT_PASSWORD || '';
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+const DB_PATH = path.join(__dirname, 'sensor_data.sqlite');
+const db = new sqlite3.Database(DB_PATH, (err) => {
+  if (err) {
+    console.error('[DB] Failed to open SQLite database:', err.message);
+  } else {
+    console.log(`[DB] SQLite database ready at ${DB_PATH}`);
+  }
+});
+
+function initializeDatabase() {
+  db.serialize(() => {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS sensor_readings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        sensor_name TEXT NOT NULL,
+        value REAL,
+        raw_value TEXT,
+        source TEXT NOT NULL DEFAULT 'mqtt'
+      )
+    `, (err) => {
+      if (err) {
+        console.error('[DB] Failed to create sensor_readings table:', err.message);
+      } else {
+        console.log('[DB] sensor_readings table ready');
+      }
+    });
+  });
+}
+
+function saveSensorReading(topic, payload, sensorName, numericValue) {
+  const timestamp = new Date().toISOString();
+  db.run(
+    'INSERT INTO sensor_readings (timestamp, topic, sensor_name, value, raw_value, source) VALUES (?, ?, ?, ?, ?, ?)',
+    [timestamp, topic, sensorName, numericValue, payload, 'mqtt'],
+    (err) => {
+      if (err) {
+        console.error('[DB] Failed to save sensor reading:', err.message);
+      }
+    }
+  );
+}
 
 // Store latest sensor data
 let latestSensorData = {
@@ -43,6 +95,7 @@ let latestSensorData = {
   relay_solenoid: false,
   relay_uv: false,
   servo_angle: 0,
+  air_label: '',
   connected: false,
   error: null
 };
@@ -50,126 +103,154 @@ let latestSensorData = {
 // Track connected WebSocket clients
 const connectedClients = new Set();
 
-// Serial Port Setup
+// MQTT Setup for ESP32 → Pi data flow
 let serialPort = null;
 let parser = null;
 let isConnected = false;
+let mqttClient = null;
+let mqttConnected = false;
+let embeddedBroker = null;
+let embeddedBrokerServer = null;
 
-function initializeSerialPort() {
-  // Check if serialport is available
-  if (!SerialPort) {
-    console.log('[Serial Port] SerialPort module not available');
-    console.log('[Serial Port] Options:');
-    console.log('  1. Use Python server: python sensor-server-python.py');
-    console.log('  2. Install serialport: npm install serialport');
-    console.log('  3. Install Visual Studio Build Tools with C++ support');
-    console.log('');
-    console.log('For Windows, Python server is recommended (no build tools needed)');
-    console.log('');
-    
-    latestSensorData.connected = false;
-    latestSensorData.error = 'SerialPort not available. Use Python server or install via: npm install serialport';
-    isConnected = false;
+function startEmbeddedBroker() {
+  if (embeddedBrokerServer) {
     return;
   }
 
-  try {
-    serialPort = new SerialPort({
-      path: SERIAL_PORT,
-      baudRate: SERIAL_BAUD,
-      autoOpen: false
-    });
-
-    parser = serialPort.pipe(new ReadlineParser({ delimiter: '\r\n' }));
-
-    parser.on('data', (data) => {
-      try {
-        // Parse sensor data from ESP32
-        // Expected format: [LABEL] VALUE
-        const match = data.match(/\[(.+?)\]\s*(.+)/);
-        if (match) {
-          const label = match[1].trim();
-          const value = match[2].trim();
-
-          // Map labels to sensor data
-          switch (label) {
-            case 'TURB':
-              const turbMatch = value.match(/Filtered:\s*(\d+)/);
-              if (turbMatch) {
-                latestSensorData.turbidity = parseInt(turbMatch[1]);
-              }
-              break;
-            case 'TDS':
-              const tdsMatch = value.match(/PPM:\s*([\d.]+)/);
-              if (tdsMatch) {
-                latestSensorData.tds = parseFloat(tdsMatch[1]);
-              }
-              break;
-            case 'MQ135':
-              const mqMatch = value.match(/PPM:\s*([\d.]+)/);
-              if (mqMatch) {
-                latestSensorData.mq135 = parseFloat(mqMatch[1]);
-              }
-              break;
-            case 'PH':
-              const phMatch = value.match(/pH:\s*([\d.]+)/);
-              if (phMatch) {
-                latestSensorData.ph = parseFloat(phMatch[1]);
-              }
-              break;
-          }
-          
-          latestSensorData.timestamp = new Date().toISOString();
-          latestSensorData.connected = true;
-          latestSensorData.error = null;
-        }
-      } catch (error) {
-        console.error('[Serial Parser] Error parsing data:', error);
-      }
-    });
-
-    serialPort.on('error', (err) => {
-      console.error('[Serial Port] Error:', err);
-      latestSensorData.connected = false;
-      latestSensorData.error = err.message;
-      broadcastSensorData();
-    });
-
-    serialPort.on('close', () => {
-      console.log('[Serial Port] Connection closed');
-      isConnected = false;
-      latestSensorData.connected = false;
-      reconnectSerial();
-    });
-
-    serialPort.open((err) => {
-      if (err) {
-        console.error('[Serial Port] Failed to open port:', err);
-        latestSensorData.connected = false;
-        latestSensorData.error = err.message;
-        broadcastSensorData();
-        setTimeout(reconnectSerial, 5000);
-      } else {
-        console.log(`[Serial Port] Connected to ${SERIAL_PORT} at ${SERIAL_BAUD} baud`);
-        isConnected = true;
-        latestSensorData.connected = true;
-        latestSensorData.error = null;
-        broadcastSensorData();
-      }
-    });
-  } catch (error) {
-    console.error('[Serial Initialization] Error:', error);
-    latestSensorData.connected = false;
-    latestSensorData.error = error.message;
-    setTimeout(reconnectSerial, 5000);
-  }
+  embeddedBroker = aedes();
+  embeddedBrokerServer = net.createServer(embeddedBroker.handle);
+  embeddedBrokerServer.listen(MQTT_PORT, '0.0.0.0', () => {
+    console.log(`[MQTT] Embedded broker listening on 0.0.0.0:${MQTT_PORT}`);
+  });
 }
 
-function reconnectSerial() {
-  if (!isConnected) {
-    console.log('[Serial Port] Attempting to reconnect...');
-    initializeSerialPort();
+function initializeMqttClient() {
+  if (mqttClient) {
+    return;
   }
+
+  const shouldUseLocalBroker = ['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(MQTT_BROKER);
+  if (shouldUseLocalBroker) {
+    startEmbeddedBroker();
+  }
+
+  const mqttOptions = {
+    host: shouldUseLocalBroker ? '127.0.0.1' : MQTT_BROKER,
+    port: MQTT_PORT,
+    protocol: 'mqtt',
+    keepalive: 60,
+    reconnectPeriod: 5000,
+  };
+
+  if (MQTT_USERNAME) {
+    mqttOptions.username = MQTT_USERNAME;
+  }
+  if (MQTT_PASSWORD) {
+    mqttOptions.password = MQTT_PASSWORD;
+  }
+
+  mqttClient = mqtt.connect(mqttOptions);
+
+  mqttClient.on('connect', () => {
+    mqttConnected = true;
+    latestSensorData.connected = true;
+    latestSensorData.error = null;
+    console.log(`[MQTT] Connected to ${MQTT_BROKER}:${MQTT_PORT}`);
+
+    const topics = [
+      'sensors/water/turbidity',
+      'sensors/water/tds',
+      'sensors/water/ph',
+      'sensors/water/distance',
+      'sensors/air/ppm',
+      'sensors/air/label',
+    ];
+
+    mqttClient.subscribe(topics, (err) => {
+      if (err) {
+        console.error('[MQTT] Subscription failed:', err);
+      } else {
+        console.log('[MQTT] Subscribed to ESP32 sensor topics');
+      }
+    });
+
+    broadcastSensorData();
+  });
+
+  mqttClient.on('message', (topic, message) => {
+    try {
+      const payload = message.toString().trim();
+      const timestamp = new Date().toISOString();
+      latestSensorData.timestamp = timestamp;
+      latestSensorData.connected = true;
+      latestSensorData.error = null;
+
+      let numericValue = null;
+      let sensorName = null;
+
+      switch (topic) {
+        case 'sensors/water/turbidity':
+          numericValue = Number(payload) || 0;
+          sensorName = 'turbidity';
+          latestSensorData.turbidity = numericValue;
+          break;
+        case 'sensors/water/tds':
+          numericValue = Number(payload) || 0;
+          sensorName = 'tds';
+          latestSensorData.tds = numericValue;
+          break;
+        case 'sensors/water/ph':
+          numericValue = Number(payload) || 0;
+          sensorName = 'ph';
+          latestSensorData.ph = numericValue;
+          break;
+        case 'sensors/water/distance':
+          numericValue = Number(payload) || 0;
+          sensorName = 'distance';
+          latestSensorData.tof = numericValue;
+          break;
+        case 'sensors/air/ppm':
+          numericValue = Number(payload) || 0;
+          sensorName = 'air_ppm';
+          latestSensorData.mq135 = numericValue;
+          break;
+        case 'sensors/air/label':
+          sensorName = 'air_label';
+          latestSensorData.air_label = payload;
+          break;
+        default:
+          break;
+      }
+
+      if (sensorName) {
+        saveSensorReading(topic, payload, sensorName, numericValue);
+      }
+
+      broadcastSensorData();
+    } catch (error) {
+      console.error('[MQTT] Error handling message:', error);
+    }
+  });
+
+  mqttClient.on('error', (err) => {
+    mqttConnected = false;
+    latestSensorData.connected = false;
+    latestSensorData.error = err.message;
+    console.error('[MQTT] Error:', err);
+    broadcastSensorData();
+  });
+
+  mqttClient.on('reconnect', () => {
+    console.log('[MQTT] Reconnecting...');
+  });
+
+  mqttClient.on('close', () => {
+    mqttConnected = false;
+    latestSensorData.connected = false;
+    latestSensorData.error = 'MQTT connection closed';
+    console.log('[MQTT] Connection closed');
+    broadcastSensorData();
+  });
 }
 
 function broadcastSensorData() {
@@ -211,11 +292,13 @@ wss.on('connection', (ws) => {
           data: latestSensorData
         }));
       } else if (parsedMessage.type === 'relay_control') {
-        // Forward relay control commands to ESP32
-        if (serialPort && isConnected) {
-          const command = parsedMessage.payload;
+        const command = parsedMessage.payload;
+        if (mqttClient && mqttConnected) {
+          mqttClient.publish('control/relay', command);
+          console.log('[WebSocket] Published relay command to MQTT:', command);
+        } else if (serialPort && isConnected) {
           serialPort.write(`${command}\n`);
-          console.log('[WebSocket] Sent command to ESP32:', command);
+          console.log('[WebSocket] Sent command to ESP32 over serial:', command);
         }
       }
     } catch (error) {
@@ -240,21 +323,27 @@ app.get('/api/sensors', (req, res) => {
 
 app.post('/api/relay/pump', (req, res) => {
   const state = req.body.state;
-  if (serialPort && isConnected) {
+  if (mqttClient && mqttConnected) {
+    mqttClient.publish('control/relay', `PUMP:${state ? '1' : '0'}`);
+    res.json({ success: true, command: `PUMP:${state ? '1' : '0'}` });
+  } else if (serialPort && isConnected) {
     serialPort.write(`PUMP:${state ? '1' : '0'}\n`);
     res.json({ success: true, command: `PUMP:${state ? '1' : '0'}` });
   } else {
-    res.status(503).json({ success: false, error: 'Serial port not connected' });
+    res.status(503).json({ success: false, error: 'ESP32 not reachable over MQTT or serial' });
   }
 });
 
 app.post('/api/relay/solenoid', (req, res) => {
   const state = req.body.state;
-  if (serialPort && isConnected) {
+  if (mqttClient && mqttConnected) {
+    mqttClient.publish('control/relay', `SOLENOID:${state ? '1' : '0'}`);
+    res.json({ success: true, command: `SOLENOID:${state ? '1' : '0'}` });
+  } else if (serialPort && isConnected) {
     serialPort.write(`SOLENOID:${state ? '1' : '0'}\n`);
     res.json({ success: true, command: `SOLENOID:${state ? '1' : '0'}` });
   } else {
-    res.status(503).json({ success: false, error: 'Serial port not connected' });
+    res.status(503).json({ success: false, error: 'ESP32 not reachable over MQTT or serial' });
   }
 });
 
@@ -270,8 +359,10 @@ app.post('/api/relay/uv', (req, res) => {
 
 app.get('/api/status', (req, res) => {
   res.json({
+    mqtt_connected: mqttConnected,
     serial_connected: isConnected,
     connected_clients: connectedClients.size,
+    mqtt_broker: `${MQTT_BROKER}:${MQTT_PORT}`,
     serial_port: SERIAL_PORT,
     timestamp: new Date().toISOString()
   });
@@ -288,7 +379,8 @@ app.get('/', (req, res) => {
 });
 
 // Initialize and start server
-initializeSerialPort();
+initializeDatabase();
+initializeMqttClient();
 
 server.listen(WS_PORT, '0.0.0.0', () => {
   console.log(`\n========================================`);
@@ -296,7 +388,8 @@ server.listen(WS_PORT, '0.0.0.0', () => {
   console.log(`========================================`);
   console.log(`📡 WebSocket Server: ws://0.0.0.0:${WS_PORT}`);
   console.log(`🌐 HTTP Server: http://localhost:${WS_PORT}`);
-  console.log(`📊 Serial Port: ${SERIAL_PORT} @ ${SERIAL_BAUD} baud`);
+  console.log(`� MQTT Broker: ${MQTT_BROKER}:${MQTT_PORT}`);
+  console.log(`�📊 Serial Port: ${SERIAL_PORT} @ ${SERIAL_BAUD} baud`);
   console.log(`========================================\n`);
 });
 
@@ -313,6 +406,12 @@ process.on('SIGINT', () => {
   connectedClients.forEach((client) => {
     client.close();
   });
+
+  if (embeddedBrokerServer) {
+    embeddedBrokerServer.close(() => {
+      console.log('[MQTT] Embedded broker closed');
+    });
+  }
 
   server.close(() => {
     console.log('[Server] Closed');

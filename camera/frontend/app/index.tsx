@@ -1,8 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+
+// Replace this with your Raspberry Pi 5's actual network IP address.
+const RASPI_IP = '192.168.137.1';
+
 // WebSocket bridge URL for sensor data (bridge subscribes to MQTT on the Pi)
 const SENSOR_WS_URL = `ws://${RASPI_IP}:8767`;
-import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -12,8 +16,6 @@ import {
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
-// Replace this with your Raspberry Pi 5's actual network IP address.
-const RASPI_IP = '192.168.137.1';
 const WS_URL = `ws://${RASPI_IP}:8766`;
 const MQTT_WS_URL = `ws://${RASPI_IP}:9001`;
 
@@ -167,6 +169,18 @@ const STREAM_HTML = `<!DOCTYPE html>
     };
 
     ws.onmessage = (event) => {
+      if (typeof event.data === 'string') {
+        try {
+          const message = JSON.parse(event.data);
+          if (message?.type === 'detection_count') {
+            post({ type: 'detectionCount', value: Number(message.count || 0) });
+          }
+        } catch {
+          // Ignore non-JSON text frames.
+        }
+        return;
+      }
+
       if (isPaused) {
         return;
       }
@@ -226,6 +240,7 @@ export default function CrayfishStreamDashboard() {
   const [isPaused, setIsPaused] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [frameCount, setFrameCount] = useState(0);
+  const [detectedCrayfish, setDetectedCrayfish] = useState(0);
   const [mqttConnected, setMqttConnected] = useState(false);
   const [sensorState, setSensorState] = useState<SensorState>({
     turbidity: '—',
@@ -348,6 +363,10 @@ export default function CrayfishStreamDashboard() {
       if (message.type === 'frame') {
         setFrameCount(message.value);
       }
+
+      if (message.type === 'detectionCount') {
+        setDetectedCrayfish(Number(message.value || 0));
+      }
     } catch {
       setConnectionState(
         event.nativeEvent.data === 'connected' ? 'live' : 'offline',
@@ -445,11 +464,15 @@ export default function CrayfishStreamDashboard() {
       </View>
 
       <View style={styles.panel}>
-        <View>
+        <View style={styles.panelInfo}>
           <Text style={styles.panelTitle}>Camera</Text>
           <Text style={styles.panelMeta}>
             {isPaused ? 'Rendering paused' : `${frameCount} frames received`}
           </Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeLabel}>Crayfish detected</Text>
+            <Text style={styles.countBadgeValue}>{detectedCrayfish}</Text>
+          </View>
         </View>
         {controls}
       </View>
@@ -611,6 +634,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 14,
     padding: 12,
+  },
+  panelInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  countBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#113325',
+    borderColor: '#2b6c46',
+    borderRadius: 999,
+    borderWidth: 1,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  countBadgeLabel: {
+    color: '#9ff7c2',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  countBadgeValue: {
+    color: '#f6fbff',
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 2,
   },
   panelTitle: {
     color: '#f2f7fb',

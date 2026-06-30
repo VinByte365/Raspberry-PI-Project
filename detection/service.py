@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
 from dataclasses import dataclass
@@ -142,6 +143,9 @@ async def client_handler(websocket: Any, state: DetectionState, config: Config) 
                 jpeg = encode_jpeg(annotated, config.jpeg_quality)
             else:
                 jpeg = latest_jpeg
+
+            count_payload = json.dumps({"type": "detection_count", "count": len(boxes)})
+            await websocket.send(count_payload)
 
             if jpeg:
                 await websocket.send(jpeg)
