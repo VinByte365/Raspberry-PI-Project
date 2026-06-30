@@ -13,7 +13,7 @@ import {
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 // Replace this with your Raspberry Pi 5's actual network IP address.
-const RASPI_IP = '192.168.100.159';
+const RASPI_IP = '192.168.137.1';
 const WS_URL = `ws://${RASPI_IP}:8766`;
 const MQTT_WS_URL = `ws://${RASPI_IP}:9001`;
 
