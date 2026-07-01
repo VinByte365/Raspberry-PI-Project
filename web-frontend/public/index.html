@@ -116,6 +116,185 @@
             background: linear-gradient(135deg, #10b981, #059669);
         }
 
+        .camera-section {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+
+        .camera-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 20px 22px;
+            border-bottom: 1px solid #334155;
+        }
+
+        .camera-title {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+
+        .camera-subtitle {
+            color: #94a3b8;
+            font-size: 0.9em;
+            margin-top: 4px;
+        }
+
+        .camera-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #475569;
+            border-radius: 8px;
+            color: #cbd5e1;
+            font-size: 0.85em;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .camera-status.live {
+            border-color: #10b981;
+            color: #bbf7d0;
+        }
+
+        .camera-status.offline,
+        .camera-status.reconnecting {
+            border-color: #ef4444;
+            color: #fecaca;
+        }
+
+        .camera-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #64748b;
+        }
+
+        .camera-status.live .camera-dot {
+            background: #10b981;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+        }
+
+        .camera-status.offline .camera-dot,
+        .camera-status.reconnecting .camera-dot {
+            background: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+        }
+
+        .camera-body {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 260px;
+            gap: 20px;
+            padding: 22px;
+        }
+
+        .camera-stage {
+            position: relative;
+            aspect-ratio: 16 / 9;
+            background: #020617;
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #cameraCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            background: #020617;
+        }
+
+        .camera-placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            color: #cbd5e1;
+            text-align: center;
+            background: rgba(2, 6, 23, 0.72);
+        }
+
+        .camera-side {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .camera-stat {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 14px;
+        }
+
+        .camera-stat-label {
+            color: #94a3b8;
+            font-size: 0.8em;
+            margin-bottom: 6px;
+        }
+
+        .camera-stat-value {
+            color: #60a5fa;
+            font-size: 1.6em;
+            font-weight: 700;
+        }
+
+        .camera-controls {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+
+        .camera-url-form {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+        }
+
+        .camera-url-input {
+            min-width: 0;
+            padding: 10px 12px;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            background: rgba(15, 23, 42, 0.85);
+            color: #e2e8f0;
+            font: inherit;
+            font-size: 0.85em;
+        }
+
+        .camera-url-input:focus {
+            border-color: #60a5fa;
+            outline: none;
+        }
+
+        .camera-control-btn {
+            width: 100%;
+            padding: 11px 14px;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            background: rgba(51, 65, 85, 0.9);
+            color: #e2e8f0;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 700;
+            transition: all 0.2s ease;
+        }
+
+        .camera-control-btn:hover {
+            border-color: #60a5fa;
+            background: rgba(59, 130, 246, 0.25);
+        }
+
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -268,6 +447,70 @@
             left: 26px;
         }
 
+        .mqtt-debug-section {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 22px;
+            backdrop-filter: blur(10px);
+            margin-top: 30px;
+        }
+
+        .mqtt-debug-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .mqtt-debug-title {
+            color: #f8fafc;
+            font-size: 1.2em;
+            font-weight: 700;
+        }
+
+        .mqtt-debug-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 12px;
+        }
+
+        .mqtt-debug-item {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 13px;
+        }
+
+        .mqtt-debug-label {
+            color: #94a3b8;
+            font-size: 0.78em;
+            margin-bottom: 6px;
+        }
+
+        .mqtt-debug-value {
+            color: #e2e8f0;
+            font-size: 0.95em;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+
+        .mqtt-debug-log {
+            background: rgba(2, 6, 23, 0.75);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #cbd5e1;
+            font-family: Consolas, 'Courier New', monospace;
+            font-size: 0.82em;
+            line-height: 1.5;
+            margin-top: 14px;
+            max-height: 180px;
+            overflow: auto;
+            padding: 12px;
+            white-space: pre-wrap;
+        }
+
         .stats {
             background: rgba(30, 41, 59, 0.8);
             border: 1px solid #334155;
@@ -344,6 +587,34 @@
             .control-btn {
                 width: 100%;
             }
+
+            .camera-header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .camera-body {
+                grid-template-columns: 1fr;
+            }
+
+            .camera-side {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .camera-controls {
+                grid-column: 1 / -1;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .camera-url-form {
+                grid-column: 1 / -1;
+            }
+
+            .mqtt-debug-header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
         }
 
         .chart-container {
@@ -382,6 +653,43 @@
 
         <div class="error-message" id="errorMessage"></div>
         <div class="warning" id="alertsWarning"></div>
+
+        <section class="camera-section" aria-label="Camera view">
+            <div class="camera-header">
+                <div>
+                    <div class="camera-title">ClawCam Live View</div>
+                    <div class="camera-subtitle">Annotated Raspberry Pi camera stream</div>
+                </div>
+                <div class="camera-status connecting" id="cameraStatus">
+                    <span class="camera-dot"></span>
+                    <span id="cameraStatusText">CONNECTING</span>
+                </div>
+            </div>
+            <div class="camera-body">
+                <div class="camera-stage">
+                    <canvas id="cameraCanvas"></canvas>
+                    <div class="camera-placeholder" id="cameraPlaceholder">Connecting to camera...</div>
+                </div>
+                <div class="camera-side">
+                    <div class="camera-stat">
+                        <div class="camera-stat-label">Frames Received</div>
+                        <div class="camera-stat-value" id="cameraFrameCount">0</div>
+                    </div>
+                    <div class="camera-stat">
+                        <div class="camera-stat-label">Crayfish Detected</div>
+                        <div class="camera-stat-value" id="cameraDetectionCount">0</div>
+                    </div>
+                    <div class="camera-controls">
+                        <div class="camera-url-form">
+                            <input class="camera-url-input" id="cameraUrlInput" aria-label="Camera WebSocket URL" />
+                            <button class="camera-control-btn" id="cameraConnectBtn">Connect</button>
+                        </div>
+                        <button class="camera-control-btn" id="cameraFitBtn">Mode: Fill</button>
+                        <button class="camera-control-btn" id="cameraPauseBtn">Pause</button>
+                    </div>
+                </div>
+            </div>
+        </section>
 
         <div class="grid">
             <div class="sensor-card">
@@ -475,6 +783,43 @@
             </div>
         </div>
 
+        <section class="mqtt-debug-section" aria-label="MQTT debug status">
+            <div class="mqtt-debug-header">
+                <div>
+                    <div class="mqtt-debug-title">MQTT Debugger</div>
+                    <div class="camera-subtitle">Confirms broker connection, subscriptions, and incoming sensor packets</div>
+                </div>
+                <button class="camera-control-btn" id="mqttDebugRefreshBtn" type="button">Refresh MQTT Debug</button>
+            </div>
+            <div class="mqtt-debug-grid">
+                <div class="mqtt-debug-item">
+                    <div class="mqtt-debug-label">Broker</div>
+                    <div class="mqtt-debug-value" id="mqttDebugBroker">--</div>
+                </div>
+                <div class="mqtt-debug-item">
+                    <div class="mqtt-debug-label">Connection</div>
+                    <div class="mqtt-debug-value" id="mqttDebugConnection">--</div>
+                </div>
+                <div class="mqtt-debug-item">
+                    <div class="mqtt-debug-label">Messages Received</div>
+                    <div class="mqtt-debug-value" id="mqttDebugMessageCount">0</div>
+                </div>
+                <div class="mqtt-debug-item">
+                    <div class="mqtt-debug-label">Last Message</div>
+                    <div class="mqtt-debug-value" id="mqttDebugLastMessage">--</div>
+                </div>
+                <div class="mqtt-debug-item">
+                    <div class="mqtt-debug-label">Subscribed Topics</div>
+                    <div class="mqtt-debug-value" id="mqttDebugTopics">--</div>
+                </div>
+                <div class="mqtt-debug-item">
+                    <div class="mqtt-debug-label">Last Error</div>
+                    <div class="mqtt-debug-value" id="mqttDebugError">--</div>
+                </div>
+            </div>
+            <pre class="mqtt-debug-log" id="mqttDebugLog">Waiting for MQTT debug data...</pre>
+        </section>
+
         <div class="stats">
             <div class="stats-grid">
                 <div class="stat-item">
@@ -503,11 +848,41 @@
         // WebSocket Configuration
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsURL = `${protocol}//${window.location.host}`;
+        const cameraParams = new URLSearchParams(window.location.search);
+        let cameraWsURL = cameraParams.get('cameraWs') || `${protocol}//${window.location.hostname}:8766`;
+        const CAMERA_RECONNECT_DELAY_MS = 3000;
         let ws = null;
+        let cameraWs = null;
+        let cameraReconnectTimer = null;
+        let cameraFitMode = 'fill';
+        let cameraPaused = false;
+        let cameraLastImage = null;
+        let cameraFrameCount = 0;
         let reconnectAttempts = 0;
         const MAX_RECONNECT_ATTEMPTS = 10;
         let updateCount = 0;
         let lastUpdateTime = Date.now();
+
+        const cameraCanvas = document.getElementById('cameraCanvas');
+        const cameraCtx = cameraCanvas.getContext('2d');
+        const cameraPlaceholder = document.getElementById('cameraPlaceholder');
+        const cameraStatus = document.getElementById('cameraStatus');
+        const cameraStatusText = document.getElementById('cameraStatusText');
+        const cameraFrameCountEl = document.getElementById('cameraFrameCount');
+        const cameraDetectionCountEl = document.getElementById('cameraDetectionCount');
+        const cameraUrlInput = document.getElementById('cameraUrlInput');
+        const cameraConnectBtn = document.getElementById('cameraConnectBtn');
+        const cameraFitBtn = document.getElementById('cameraFitBtn');
+        const cameraPauseBtn = document.getElementById('cameraPauseBtn');
+        cameraUrlInput.value = cameraWsURL;
+        const mqttDebugRefreshBtn = document.getElementById('mqttDebugRefreshBtn');
+        const mqttDebugBroker = document.getElementById('mqttDebugBroker');
+        const mqttDebugConnection = document.getElementById('mqttDebugConnection');
+        const mqttDebugMessageCount = document.getElementById('mqttDebugMessageCount');
+        const mqttDebugLastMessage = document.getElementById('mqttDebugLastMessage');
+        const mqttDebugTopics = document.getElementById('mqttDebugTopics');
+        const mqttDebugError = document.getElementById('mqttDebugError');
+        const mqttDebugLog = document.getElementById('mqttDebugLog');
 
         // Alert thresholds
         const THRESHOLDS = {
@@ -537,6 +912,8 @@
                     if (message.type === 'sensor_update') {
                         updateDashboard(message.data);
                         updateCount++;
+                    } else if (message.type === 'mqtt_debug') {
+                        updateMqttDebug(message.data);
                     }
                 } catch (error) {
                     console.error('Error parsing message:', error);
@@ -685,8 +1062,266 @@
             }, 5000);
         }
 
+        function formatDebugTime(value) {
+            if (!value) return '--';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return value;
+            return date.toLocaleTimeString();
+        }
+
+        function updateMqttDebug(data) {
+            if (!data) return;
+
+            mqttDebugBroker.textContent = `${data.broker || '--'}:${data.port || '--'}`;
+            mqttDebugConnection.textContent = data.connected ? 'CONNECTED' : 'DISCONNECTED';
+            mqttDebugConnection.style.color = data.connected ? '#86efac' : '#fca5a5';
+            mqttDebugMessageCount.textContent = String(data.messageCount || 0);
+
+            if (data.lastTopic) {
+                mqttDebugLastMessage.textContent = `${formatDebugTime(data.lastMessageAt)} | ${data.lastTopic} = ${data.lastPayload}`;
+            } else {
+                mqttDebugLastMessage.textContent = '--';
+            }
+
+            const topics = data.subscribedTopics && data.subscribedTopics.length
+                ? data.subscribedTopics
+                : data.configuredTopics;
+            mqttDebugTopics.textContent = topics && topics.length ? topics.join(', ') : '--';
+            mqttDebugError.textContent = data.lastError || data.subscriptionError || '--';
+            mqttDebugError.style.color = (data.lastError || data.subscriptionError) ? '#fca5a5' : '#e2e8f0';
+
+            const lines = [
+                `Server time: ${formatDebugTime(data.serverTime)}`,
+                `Connects: ${data.connectCount || 0} | Reconnects: ${data.reconnectCount || 0}`,
+                `Last connect: ${formatDebugTime(data.lastConnectAt)} | Last disconnect: ${formatDebugTime(data.lastDisconnectAt)}`,
+                '',
+                'Recent packets:',
+                ...(data.recentMessages || []).map((message) =>
+                    `${formatDebugTime(message.timestamp)}  ${message.topic}  ${message.payload}`
+                )
+            ];
+
+            mqttDebugLog.textContent = lines.join('\n');
+        }
+
+        async function refreshMqttDebug() {
+            try {
+                const response = await fetch('/api/mqtt-debug');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                updateMqttDebug(await response.json());
+            } catch (error) {
+                mqttDebugError.textContent = `Debug fetch failed: ${error.message}`;
+                mqttDebugError.style.color = '#fca5a5';
+            }
+        }
+
+        function updateCameraStatus(state) {
+            const labels = {
+                connecting: 'CONNECTING',
+                live: 'LIVE',
+                reconnecting: 'RECONNECTING',
+                offline: 'OFFLINE'
+            };
+
+            cameraStatus.className = `camera-status ${state}`;
+            cameraStatusText.textContent = labels[state] || labels.offline;
+        }
+
+        function setCameraPlaceholder(text, visible) {
+            cameraPlaceholder.textContent = text;
+            cameraPlaceholder.style.display = visible ? 'flex' : 'none';
+        }
+
+        function sizeCameraCanvas() {
+            const scale = window.devicePixelRatio || 1;
+            const nextWidth = Math.max(1, Math.floor(cameraCanvas.clientWidth * scale));
+            const nextHeight = Math.max(1, Math.floor(cameraCanvas.clientHeight * scale));
+
+            if (cameraCanvas.width !== nextWidth || cameraCanvas.height !== nextHeight) {
+                cameraCanvas.width = nextWidth;
+                cameraCanvas.height = nextHeight;
+                drawLastCameraFrame();
+            }
+        }
+
+        function drawCameraFrame(img) {
+            sizeCameraCanvas();
+
+            const canvasRatio = cameraCanvas.width / cameraCanvas.height;
+            const imageRatio = img.naturalWidth / img.naturalHeight;
+            let drawWidth = cameraCanvas.width;
+            let drawHeight = cameraCanvas.height;
+
+            if (cameraFitMode === 'fit') {
+                if (imageRatio > canvasRatio) {
+                    drawHeight = cameraCanvas.width / imageRatio;
+                } else {
+                    drawWidth = cameraCanvas.height * imageRatio;
+                }
+            } else if (imageRatio > canvasRatio) {
+                drawWidth = cameraCanvas.height * imageRatio;
+            } else {
+                drawHeight = cameraCanvas.width / imageRatio;
+            }
+
+            const x = (cameraCanvas.width - drawWidth) / 2;
+            const y = (cameraCanvas.height - drawHeight) / 2;
+
+            cameraCtx.fillStyle = '#020617';
+            cameraCtx.fillRect(0, 0, cameraCanvas.width, cameraCanvas.height);
+            cameraCtx.drawImage(img, x, y, drawWidth, drawHeight);
+        }
+
+        function drawLastCameraFrame() {
+            if (cameraLastImage) {
+                drawCameraFrame(cameraLastImage);
+            }
+        }
+
+        function handleCameraTextMessage(data) {
+            try {
+                const message = JSON.parse(data);
+                if (message && message.type === 'detection_count') {
+                    cameraDetectionCountEl.textContent = Number(message.count || 0);
+                }
+            } catch (error) {
+                console.warn('[Camera] Ignoring non-JSON text frame:', data);
+            }
+        }
+
+        function handleCameraBinaryMessage(data) {
+            if (cameraPaused) {
+                return;
+            }
+
+            const blob = new Blob([data], { type: 'image/jpeg' });
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+
+            img.onload = () => {
+                cameraLastImage = img;
+                cameraFrameCount += 1;
+                cameraFrameCountEl.textContent = cameraFrameCount;
+                drawCameraFrame(img);
+                setCameraPlaceholder('', false);
+                URL.revokeObjectURL(url);
+            };
+
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+            };
+
+            img.src = url;
+        }
+
+        function scheduleCameraReconnect() {
+            if (cameraReconnectTimer) {
+                return;
+            }
+
+            cameraReconnectTimer = setTimeout(() => {
+                cameraReconnectTimer = null;
+                connectCameraWebSocket();
+            }, CAMERA_RECONNECT_DELAY_MS);
+        }
+
+        function connectCameraWebSocket(nextUrl) {
+            if (nextUrl) {
+                cameraWsURL = nextUrl;
+                cameraUrlInput.value = cameraWsURL;
+            }
+
+            if (cameraReconnectTimer) {
+                clearTimeout(cameraReconnectTimer);
+                cameraReconnectTimer = null;
+            }
+
+            if (cameraWs) {
+                cameraWs.onclose = null;
+                cameraWs.close();
+                cameraWs = null;
+            }
+
+            updateCameraStatus('connecting');
+            if (!cameraLastImage) {
+                setCameraPlaceholder('Connecting to camera...', true);
+            }
+
+            try {
+                cameraWs = new WebSocket(cameraWsURL);
+                cameraWs.binaryType = 'arraybuffer';
+            } catch (error) {
+                console.warn('[Camera] Failed to create WebSocket:', error);
+                updateCameraStatus('offline');
+                setCameraPlaceholder(`Camera unavailable at ${cameraWsURL}. Retrying...`, true);
+                scheduleCameraReconnect();
+                return;
+            }
+
+            cameraWs.onopen = () => {
+                updateCameraStatus('live');
+                setCameraPlaceholder('', false);
+            };
+
+            cameraWs.onmessage = (event) => {
+                if (typeof event.data === 'string') {
+                    handleCameraTextMessage(event.data);
+                    return;
+                }
+
+                handleCameraBinaryMessage(event.data);
+            };
+
+            cameraWs.onerror = (error) => {
+                console.warn('[Camera] WebSocket error:', error);
+                updateCameraStatus('offline');
+            };
+
+            cameraWs.onclose = () => {
+                updateCameraStatus('reconnecting');
+                if (!cameraLastImage) {
+                    setCameraPlaceholder(`Reconnecting to ${cameraWsURL}...`, true);
+                }
+                scheduleCameraReconnect();
+            };
+        }
+
         // Event Listeners
         document.getElementById('refreshBtn').addEventListener('click', requestSensorStatus);
+
+        cameraConnectBtn.addEventListener('click', () => {
+            const nextUrl = cameraUrlInput.value.trim();
+            if (!nextUrl) {
+                setCameraPlaceholder('Enter a camera WebSocket URL.', true);
+                updateCameraStatus('offline');
+                return;
+            }
+
+            cameraFrameCount = 0;
+            cameraFrameCountEl.textContent = '0';
+            connectCameraWebSocket(nextUrl);
+        });
+
+        cameraUrlInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                cameraConnectBtn.click();
+            }
+        });
+
+        cameraFitBtn.addEventListener('click', () => {
+            cameraFitMode = cameraFitMode === 'fill' ? 'fit' : 'fill';
+            cameraFitBtn.textContent = `Mode: ${cameraFitMode === 'fill' ? 'Fill' : 'Fit'}`;
+            drawLastCameraFrame();
+        });
+
+        cameraPauseBtn.addEventListener('click', () => {
+            cameraPaused = !cameraPaused;
+            cameraPauseBtn.textContent = cameraPaused ? 'Resume' : 'Pause';
+        });
+
+        window.addEventListener('resize', sizeCameraCanvas);
         
         document.getElementById('exportBtn').addEventListener('click', () => {
             const data = {
@@ -724,6 +1359,8 @@
         }, 1000);
 
         // Initialize
+        sizeCameraCanvas();
+        connectCameraWebSocket();
         connectWebSocket();
     </script>
 </body>

@@ -31,6 +31,14 @@ const MQTT_BROKER = process.env.MQTT_BROKER || 'localhost';
 const MQTT_PORT = parseInt(process.env.MQTT_PORT || '1883');
 const MQTT_USERNAME = process.env.MQTT_USERNAME || '';
 const MQTT_PASSWORD = process.env.MQTT_PASSWORD || '';
+const MQTT_TOPICS = [
+  'sensors/water/turbidity',
+  'sensors/water/tds',
+  'sensors/water/ph',
+  'sensors/water/distance',
+  'sensors/air/ppm',
+  'sensors/air/label',
+];
 
 // Middleware
 app.use(cors());
@@ -107,6 +115,60 @@ let parser = null;
 let isConnected = false;
 let mqttClient = null;
 let mqttConnected = false;
+let mqttDebug = {
+  broker: MQTT_BROKER,
+  port: MQTT_PORT,
+  connected: false,
+  configuredTopics: MQTT_TOPICS,
+  subscribedTopics: [],
+  connectCount: 0,
+  reconnectCount: 0,
+  messageCount: 0,
+  lastConnectAt: null,
+  lastDisconnectAt: null,
+  lastMessageAt: null,
+  lastTopic: null,
+  lastPayload: null,
+  lastError: null,
+  subscriptionError: null,
+  recentMessages: [],
+};
+
+function getMqttDebugPayload() {
+  return {
+    ...mqttDebug,
+    connected: mqttConnected,
+    clientPresent: Boolean(mqttClient),
+    serverTime: new Date().toISOString(),
+  };
+}
+
+function broadcastMqttDebug() {
+  const payload = JSON.stringify({
+    type: 'mqtt_debug',
+    data: getMqttDebugPayload()
+  });
+
+  connectedClients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(payload);
+    }
+  });
+}
+
+function recordMqttMessage(topic, payload) {
+  mqttDebug.messageCount += 1;
+  mqttDebug.lastMessageAt = new Date().toISOString();
+  mqttDebug.lastTopic = topic;
+  mqttDebug.lastPayload = payload;
+  mqttDebug.lastError = null;
+  mqttDebug.recentMessages.unshift({
+    topic,
+    payload,
+    timestamp: mqttDebug.lastMessageAt,
+  });
+  mqttDebug.recentMessages = mqttDebug.recentMessages.slice(0, 8);
+}
 
 function initializeMqttClient() {
   if (mqttClient) {
@@ -135,33 +197,34 @@ function initializeMqttClient() {
 
   mqttClient.on('connect', () => {
     mqttConnected = true;
+    mqttDebug.connected = true;
+    mqttDebug.connectCount += 1;
+    mqttDebug.lastConnectAt = new Date().toISOString();
+    mqttDebug.lastError = null;
+    mqttDebug.subscriptionError = null;
     latestSensorData.connected = true;
     latestSensorData.error = null;
     console.log(`[MQTT] Connected to ${MQTT_BROKER}:${MQTT_PORT}`);
 
-    const topics = [
-      'sensors/water/turbidity',
-      'sensors/water/tds',
-      'sensors/water/ph',
-      'sensors/water/distance',
-      'sensors/air/ppm',
-      'sensors/air/label',
-    ];
-
-    mqttClient.subscribe(topics, (err) => {
+    mqttClient.subscribe(MQTT_TOPICS, (err, granted) => {
       if (err) {
+        mqttDebug.subscriptionError = err.message;
         console.error('[MQTT] Subscription failed:', err);
       } else {
+        mqttDebug.subscribedTopics = (granted || []).map((item) => item.topic);
         console.log('[MQTT] Subscribed to ESP32 sensor topics');
       }
+      broadcastMqttDebug();
     });
 
     broadcastSensorData();
+    broadcastMqttDebug();
   });
 
   mqttClient.on('message', (topic, message) => {
     try {
       const payload = message.toString().trim();
+      recordMqttMessage(topic, payload);
       const timestamp = new Date().toISOString();
       latestSensorData.timestamp = timestamp;
       latestSensorData.connected = true;
@@ -209,29 +272,41 @@ function initializeMqttClient() {
       }
 
       broadcastSensorData();
+      broadcastMqttDebug();
     } catch (error) {
+      mqttDebug.lastError = error.message;
       console.error('[MQTT] Error handling message:', error);
+      broadcastMqttDebug();
     }
   });
 
   mqttClient.on('error', (err) => {
     mqttConnected = false;
+    mqttDebug.connected = false;
+    mqttDebug.lastError = err.message;
     latestSensorData.connected = false;
     latestSensorData.error = err.message;
     console.error('[MQTT] Error:', err);
     broadcastSensorData();
+    broadcastMqttDebug();
   });
 
   mqttClient.on('reconnect', () => {
+    mqttDebug.reconnectCount += 1;
+    mqttDebug.lastError = 'Reconnecting to MQTT broker';
     console.log('[MQTT] Reconnecting...');
+    broadcastMqttDebug();
   });
 
   mqttClient.on('close', () => {
     mqttConnected = false;
+    mqttDebug.connected = false;
+    mqttDebug.lastDisconnectAt = new Date().toISOString();
     latestSensorData.connected = false;
     latestSensorData.error = 'MQTT connection closed';
     console.log('[MQTT] Connection closed');
     broadcastSensorData();
+    broadcastMqttDebug();
   });
 }
 
@@ -261,6 +336,10 @@ wss.on('connection', (ws) => {
     type: 'sensor_update',
     data: latestSensorData
   }));
+  ws.send(JSON.stringify({
+    type: 'mqtt_debug',
+    data: getMqttDebugPayload()
+  }));
 
   ws.on('message', (message) => {
     try {
@@ -272,6 +351,11 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({
           type: 'sensor_update',
           data: latestSensorData
+        }));
+      } else if (parsedMessage.type === 'request_mqtt_debug') {
+        ws.send(JSON.stringify({
+          type: 'mqtt_debug',
+          data: getMqttDebugPayload()
         }));
       } else if (parsedMessage.type === 'relay_control') {
         const command = parsedMessage.payload;
@@ -348,6 +432,10 @@ app.get('/api/status', (req, res) => {
     serial_port: SERIAL_PORT,
     timestamp: new Date().toISOString()
   });
+});
+
+app.get('/api/mqtt-debug', (req, res) => {
+  res.json(getMqttDebugPayload());
 });
 
 // Health check endpoint
