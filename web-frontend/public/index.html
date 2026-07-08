@@ -307,8 +307,10 @@
             border: 1px solid #334155;
             border-radius: 12px;
             padding: 25px;
+            padding-top: 0;
             backdrop-filter: blur(10px);
             transition: all 0.3s ease;
+            overflow: hidden;
         }
 
         .sensor-card:hover {
@@ -631,7 +633,20 @@
             font-weight: 600;
             margin-bottom: 20px;
         }
+        .chart-wrapper {
+            position: relative;
+            height: 80px;
+            margin: -25px -25px 15px -25px;
+            background: rgba(15, 23, 42, 0.4);
+            border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+        }
+
+        .chart-wrapper canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -693,6 +708,9 @@
 
         <div class="grid">
             <div class="sensor-card">
+                <div class="chart-wrapper">
+                    <canvas id="turbidityChart"></canvas>
+                </div>
                 <div class="sensor-header">
                     <span class="sensor-title">💧 Turbidity</span>
                     <span class="sensor-icon">≈</span>
@@ -705,6 +723,9 @@
             </div>
 
             <div class="sensor-card">
+                <div class="chart-wrapper">
+                    <canvas id="tdsChart"></canvas>
+                </div>
                 <div class="sensor-header">
                     <span class="sensor-title">🧂 TDS (Dissolved Solids)</span>
                     <span class="sensor-icon">≈</span>
@@ -717,6 +738,9 @@
             </div>
 
             <div class="sensor-card">
+                <div class="chart-wrapper">
+                    <canvas id="mqChart"></canvas>
+                </div>
                 <div class="sensor-header">
                     <span class="sensor-title">💨 MQ135 Gas</span>
                     <span class="sensor-icon">☁️</span>
@@ -729,6 +753,9 @@
             </div>
 
             <div class="sensor-card">
+                <div class="chart-wrapper">
+                    <canvas id="phChart"></canvas>
+                </div>
                 <div class="sensor-header">
                     <span class="sensor-title">📊 pH Level</span>
                     <span class="sensor-icon">⚗️</span>
@@ -741,6 +768,9 @@
             </div>
 
             <div class="sensor-card">
+                <div class="chart-wrapper">
+                    <canvas id="tofChart"></canvas>
+                </div>
                 <div class="sensor-header">
                     <span class="sensor-title">📏 Distance (TOF)</span>
                     <span class="sensor-icon">📡</span>
@@ -894,6 +924,59 @@
 
         let alerts = [];
 
+        // Chart configuration
+        const CHART_CONFIG = {
+            turbidity: { color: '#f59e0b', label: 'Turbidity', key: 'turbidity' },
+            tds: { color: '#10b981', label: 'TDS', key: 'tds' },
+            mq: { color: '#8b5cf6', label: 'MQ135', key: 'mq135' },
+            ph: { color: '#3b82f6', label: 'pH', key: 'ph' },
+            tof: { color: '#ec4899', label: 'Distance', key: 'tof' }
+        };
+
+        const MAX_HISTORY = 60;
+        const chartHistory = { turbidity: [], tds: [], mq135: [], ph: [], tof: [] };
+        const charts = {};
+
+        function initChart(canvasId, color) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        borderColor: color,
+                        backgroundColor: color + '1a',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHitRadius: 5,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    scales: {
+                        x: { display: false, grid: { display: false } },
+                        y: { display: false, grid: { display: false }, beginAtZero: false }
+                    }
+                }
+            });
+        }
+
+        function updateCharts() {
+            Object.entries(CHART_CONFIG).forEach(([id, cfg]) => {
+                const history = chartHistory[cfg.key];
+                if (charts[id] && history.length > 0) {
+                    charts[id].data.datasets[0].data = history;
+                    charts[id].update('none');
+                }
+            });
+        }
+
         function connectWebSocket() {
             console.log('Connecting to WebSocket...');
             ws = new WebSocket(wsURL);
@@ -985,7 +1068,18 @@
             }
 
             document.getElementById('serialStatus').textContent = data.connected ? 'Online' : 'Offline';
-            
+
+            // Update chart history
+            ['turbidity', 'tds', 'mq135', 'ph', 'tof'].forEach(key => {
+                if (data[key] !== undefined && data[key] !== null) {
+                    chartHistory[key].push(data[key]);
+                    if (chartHistory[key].length > MAX_HISTORY) {
+                        chartHistory[key].shift();
+                    }
+                }
+            });
+            updateCharts();
+
             if (data.error) {
                 showError(`Serial Error: ${data.error}`);
             }
@@ -1357,6 +1451,11 @@
                 document.getElementById('updateRate').textContent = rate;
             }
         }, 1000);
+
+        // Initialize charts
+        Object.entries(CHART_CONFIG).forEach(([id, cfg]) => {
+            charts[id] = initChart(id + 'Chart', cfg.color);
+        });
 
         // Initialize
         sizeCameraCanvas();
