@@ -359,7 +359,6 @@
             border: 1px solid var(--color-hairline);
             border-radius: var(--radius-lg);
             padding: 32px;
-            padding-top: 0;
             box-shadow: var(--shadow-1);
             transition: all 0.2s ease;
             overflow: hidden;
@@ -372,135 +371,72 @@
 
         .chart-wrapper {
             position: relative;
-            height: 80px;
-            margin: 0 -32px 16px -32px;
+            height: 200px;
+            margin: 0 -32px -32px -32px;
             background: var(--color-canvas-soft);
-            border-bottom: 1px solid var(--color-hairline-cool);
+            border-top: 1px solid var(--color-hairline-cool);
         }
 
         .chart-wrapper canvas {
-            width: 100% !important;
-            height: 100% !important;
+            display: block;
+        }
+
+        .sensor-info {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            column-gap: 12px;
+            row-gap: 6px;
+            padding: 0 0 16px 0;
         }
 
         .sensor-header {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            margin-bottom: 12px;
+            gap: 5px;
         }
 
         .sensor-title {
-            font-size: 15px;
+            font-size: 12px;
             font-weight: 500;
-            color: var(--color-ink-mute);
+            color: var(--color-ink-mute-2);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
         }
 
         .sensor-icon {
-            font-size: 18px;
-            opacity: 0.6;
+            font-size: 13px;
+            opacity: 0.4;
+        }
+
+        .sensor-reading {
+            display: flex;
+            align-items: baseline;
+            gap: 5px;
+            flex-wrap: wrap;
         }
 
         .sensor-value {
-            font-size: 36px;
+            font-size: 20px;
             font-weight: 500;
-            letter-spacing: -0.72px;
+            letter-spacing: -0.42px;
             color: var(--color-ink);
-            margin-bottom: 4px;
-            line-height: 1.1;
+            line-height: 1;
         }
 
         .sensor-unit {
-            font-size: 13px;
+            font-size: 11px;
             color: var(--color-ink-mute-2);
-            margin-top: 4px;
         }
 
         .sensor-status {
-            padding-top: 12px;
-            border-top: 1px solid var(--color-hairline-cool);
-            margin-top: 12px;
-            font-size: 13px;
+            font-size: 11px;
             color: var(--color-ink-mute);
-        }
-
-        .relay-section {
-            background: var(--color-canvas);
-            border: 1px solid var(--color-hairline);
-            border-radius: var(--radius-lg);
-            padding: 28px;
-            box-shadow: var(--shadow-1);
-            margin-bottom: 24px;
-        }
-
-        .relay-title {
-            font-size: 18px;
-            font-weight: 500;
-            margin-bottom: 20px;
-            color: var(--color-ink);
-        }
-
-        .relay-controls {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 12px;
-        }
-
-        .relay-control {
-            padding: 20px;
+            padding: 2px 8px;
             background: var(--color-canvas-soft);
-            border: 1px solid var(--color-hairline);
-            border-radius: var(--radius-md);
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.15s ease;
-        }
-
-        .relay-control:hover {
-            border-color: var(--color-hairline-strong);
-        }
-
-        .relay-control.on {
-            background: #f0fdf4;
-            border-color: var(--color-primary);
-        }
-
-        .relay-name {
-            font-weight: 500;
-            margin-bottom: 12px;
-            color: var(--color-ink);
-            font-size: 14px;
-        }
-
-        .relay-toggle {
-            display: inline-block;
-            width: 44px;
-            height: 24px;
-            background: var(--color-hairline);
-            border-radius: 12px;
-            position: relative;
-            transition: all 0.2s ease;
-        }
-
-        .relay-control.on .relay-toggle {
-            background: var(--color-primary);
-        }
-
-        .relay-toggle::after {
-            content: '';
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            background: white;
-            border-radius: 50%;
-            top: 2px;
-            left: 2px;
-            transition: all 0.2s ease;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-        }
-
-        .relay-control.on .relay-toggle::after {
-            left: 22px;
+            border-radius: var(--radius-sm);
+            white-space: nowrap;
         }
 
         .mqtt-debug-section {
@@ -708,109 +644,100 @@
 
         <div class="grid">
             <div class="sensor-card">
+                <div class="sensor-info">
+                    <div class="sensor-header">
+                        <span class="sensor-title">Turbidity</span>
+                        <span class="sensor-icon">💧</span>
+                    </div>
+                    <div class="sensor-reading">
+                        <span class="sensor-value" id="turbidityValue">--</span>
+                        <span class="sensor-unit">Raw ADC</span>
+                    </div>
+                    <div class="sensor-status">
+                        <span id="turbidityStatus">--</span>
+                    </div>
+                </div>
                 <div class="chart-wrapper">
                     <canvas id="turbidityChart"></canvas>
                 </div>
-                <div class="sensor-header">
-                    <span class="sensor-title">💧 Turbidity</span>
-                    <span class="sensor-icon">≈</span>
-                </div>
-                <div class="sensor-value" id="turbidityValue">--</div>
-                <div class="sensor-unit">Raw ADC Value</div>
-                <div class="sensor-status">
-                    <div>Status: <span id="turbidityStatus">--</span></div>
-                </div>
             </div>
 
             <div class="sensor-card">
+                <div class="sensor-info">
+                    <div class="sensor-header">
+                        <span class="sensor-title">TDS</span>
+                        <span class="sensor-icon">🧂</span>
+                    </div>
+                    <div class="sensor-reading">
+                        <span class="sensor-value" id="tdsValue">--</span>
+                        <span class="sensor-unit">ppm</span>
+                    </div>
+                    <div class="sensor-status">
+                        <span id="tdsStatus">--</span>
+                    </div>
+                </div>
                 <div class="chart-wrapper">
                     <canvas id="tdsChart"></canvas>
                 </div>
-                <div class="sensor-header">
-                    <span class="sensor-title">🧂 TDS (Dissolved Solids)</span>
-                    <span class="sensor-icon">≈</span>
-                </div>
-                <div class="sensor-value" id="tdsValue">--</div>
-                <div class="sensor-unit">ppm (parts per million)</div>
-                <div class="sensor-status">
-                    <div>Status: <span id="tdsStatus">--</span></div>
-                </div>
             </div>
 
             <div class="sensor-card">
+                <div class="sensor-info">
+                    <div class="sensor-header">
+                        <span class="sensor-title">Air Quality</span>
+                        <span class="sensor-icon">💨</span>
+                    </div>
+                    <div class="sensor-reading">
+                        <span class="sensor-value" id="mqValue">--</span>
+                        <span class="sensor-unit">ppm</span>
+                    </div>
+                    <div class="sensor-status">
+                        <span id="mqStatus">--</span>
+                    </div>
+                </div>
                 <div class="chart-wrapper">
                     <canvas id="mqChart"></canvas>
                 </div>
-                <div class="sensor-header">
-                    <span class="sensor-title">💨 MQ135 Gas</span>
-                    <span class="sensor-icon">☁️</span>
-                </div>
-                <div class="sensor-value" id="mqValue">--</div>
-                <div class="sensor-unit">ppm (air quality)</div>
-                <div class="sensor-status">
-                    <div>Status: <span id="mqStatus">--</span></div>
-                </div>
             </div>
 
             <div class="sensor-card">
+                <div class="sensor-info">
+                    <div class="sensor-header">
+                        <span class="sensor-title">pH Level</span>
+                        <span class="sensor-icon">⚗️</span>
+                    </div>
+                    <div class="sensor-reading">
+                        <span class="sensor-value" id="phValue">--</span>
+                        <span class="sensor-unit">pH</span>
+                    </div>
+                    <div class="sensor-status">
+                        <span id="phStatus">--</span>
+                    </div>
+                </div>
                 <div class="chart-wrapper">
                     <canvas id="phChart"></canvas>
                 </div>
-                <div class="sensor-header">
-                    <span class="sensor-title">📊 pH Level</span>
-                    <span class="sensor-icon">⚗️</span>
-                </div>
-                <div class="sensor-value" id="phValue">--</div>
-                <div class="sensor-unit">pH (0-14 scale)</div>
-                <div class="sensor-status">
-                    <div>Status: <span id="phStatus">--</span></div>
-                </div>
             </div>
 
             <div class="sensor-card">
+                <div class="sensor-info">
+                    <div class="sensor-header">
+                        <span class="sensor-title">Distance</span>
+                        <span class="sensor-icon">📏</span>
+                    </div>
+                    <div class="sensor-reading">
+                        <span class="sensor-value" id="tofValue">--</span>
+                        <span class="sensor-unit">mm</span>
+                    </div>
+                    <div class="sensor-status">
+                        <span id="tofStatus">--</span>
+                    </div>
+                </div>
                 <div class="chart-wrapper">
                     <canvas id="tofChart"></canvas>
                 </div>
-                <div class="sensor-header">
-                    <span class="sensor-title">📏 Distance (TOF)</span>
-                    <span class="sensor-icon">📡</span>
-                </div>
-                <div class="sensor-value" id="tofValue">--</div>
-                <div class="sensor-unit">mm</div>
-                <div class="sensor-status">
-                    <div>Status: <span id="tofStatus">--</span></div>
-                </div>
             </div>
 
-            <div class="sensor-card">
-                <div class="sensor-header">
-                    <span class="sensor-title">⚙️ System Info</span>
-                    <span class="sensor-icon">ℹ️</span>
-                </div>
-                <div class="sensor-value" style="font-size: 1.5em;">--</div>
-                <div class="sensor-unit">Last Update</div>
-                <div class="sensor-status">
-                    <div id="systemInfo">--</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="relay-section">
-            <div class="relay-title">Relay Controls</div>
-            <div class="relay-controls">
-                <div class="relay-control" id="pumpRelay" onclick="toggleRelay('pump')">
-                    <div class="relay-name">💧 Pump</div>
-                    <div class="relay-toggle"></div>
-                </div>
-                <div class="relay-control" id="solenoidRelay" onclick="toggleRelay('solenoid')">
-                    <div class="relay-name">🚰 Solenoid</div>
-                    <div class="relay-toggle"></div>
-                </div>
-                <div class="relay-control" id="uvRelay" onclick="toggleRelay('uv')">
-                    <div class="relay-name">☀️ UV Light</div>
-                    <div class="relay-toggle"></div>
-                </div>
-            </div>
         </div>
 
         <section class="mqtt-debug-section" aria-label="MQTT debug status">
@@ -961,7 +888,12 @@
                     plugins: { legend: { display: false }, tooltip: { enabled: false } },
                     scales: {
                         x: { display: false, grid: { display: false } },
-                        y: { display: false, grid: { display: false }, beginAtZero: false }
+                        y: {
+                            display: true,
+                            grid: { color: 'rgba(0,0,0,0.04)', drawBorder: false },
+                            ticks: { display: false },
+                            beginAtZero: false
+                        }
                     }
                 }
             });
@@ -1055,11 +987,6 @@
             updateSensorStatus('mq135', data.mq135);
             updateSensorStatus('ph', data.ph);
 
-            // Update relay states
-            updateRelayUI('pump', data.relay_pump);
-            updateRelayUI('solenoid', data.relay_solenoid);
-            updateRelayUI('uv', data.relay_uv);
-
             // Update system info
             if (data.timestamp) {
                 const date = new Date(data.timestamp);
@@ -1111,29 +1038,6 @@
             }
 
             statusEl.textContent = status;
-        }
-
-        function updateRelayUI(relay, state) {
-            const element = document.getElementById(`${relay}Relay`);
-            if (state) {
-                element.classList.add('on');
-            } else {
-                element.classList.remove('on');
-            }
-        }
-
-        function toggleRelay(relay) {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                const element = document.getElementById(`${relay}Relay`);
-                const newState = !element.classList.contains('on');
-                
-                ws.send(JSON.stringify({
-                    type: 'relay_control',
-                    payload: `${relay.toUpperCase()}:${newState ? '1' : '0'}`
-                }));
-            } else {
-                showError('WebSocket not connected');
-            }
         }
 
         function requestSensorStatus() {
