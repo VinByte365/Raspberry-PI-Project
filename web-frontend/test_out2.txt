@@ -1,0 +1,16 @@
+[WARNING] Serial port not available. Use Python server or install: npm install serialport
+
+========================================
+🚀 Sensor Dashboard Server Started
+========================================
+📡 WebSocket Server: ws://0.0.0.0:8080
+🌐 HTTP Server: http://localhost:8080
+📶 MQTT Broker: localhost:1883
+📊 Serial Port: COM3 @ 115200 baud
+========================================
+
+[DB] SQLite database ready at E:\MELVIN FOLDER\RASPBERRYPI\Raspberry-PI-Project\web-frontend\sensor_data.sqlite
+[MQTT] Connection closed
+[DB] sensor_readings table ready
+[MQTT] Reconnecting...
+[MQTT] Connection closed
