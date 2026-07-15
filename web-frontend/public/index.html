@@ -1,9 +1,9 @@
-    <!DOCTYPE html>
+ <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Sensor Dashboard</title>
+        <title>Automated Crayfish Farming System with Water Quality Monitoring and Control</title>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -305,29 +305,6 @@
                 gap: 10px;
             }
 
-            .camera-url-form {
-                display: grid;
-                grid-template-columns: 1fr auto;
-                gap: 8px;
-            }
-
-            .camera-url-input {
-                padding: 8px 12px;
-                border: 1px solid var(--color-hairline);
-                border-radius: var(--radius-sm);
-                background: var(--color-canvas);
-                color: var(--color-ink);
-                font-family: var(--font-sans);
-                font-size: 13px;
-                min-width: 0;
-            }
-
-            .camera-url-input:focus {
-                border-color: var(--color-primary);
-                outline: none;
-                box-shadow: 0 0 0 2px rgba(62, 207, 142, 0.15);
-            }
-
             .camera-control-btn {
                 padding: 8px 14px;
                 border: 1px solid var(--color-hairline-strong);
@@ -554,7 +531,7 @@
                 border-top: 1px solid var(--color-hairline-cool);
             }
 
-            .db-stats-section {
+            .actuator-section {
                 background: var(--color-canvas);
                 border: 1px solid var(--color-hairline);
                 border-radius: var(--radius-lg);
@@ -563,34 +540,52 @@
                 margin-bottom: 24px;
             }
 
-            .db-stats-grid {
+            .actuator-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
                 gap: 12px;
-                margin-top: 12px;
+                margin-top: 16px;
             }
 
-            .db-stat-item {
+            .actuator-item {
                 background: var(--color-canvas-soft);
                 border: 1px solid var(--color-hairline-cool);
                 border-radius: var(--radius-md);
-                padding: 12px;
+                padding: 16px;
                 text-align: center;
             }
 
-            .db-stat-label {
-                color: var(--color-ink-mute);
-                font-size: 11px;
-                font-weight: 500;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
+            .actuator-icon {
+                font-size: 28px;
+                margin-bottom: 8px;
             }
 
-            .db-stat-value {
-                color: var(--color-ink);
-                font-size: 18px;
+            .actuator-name {
+                font-size: 12px;
                 font-weight: 500;
-                margin-top: 4px;
+                color: var(--color-ink-mute);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 6px;
+            }
+
+            .actuator-state {
+                font-size: 14px;
+                font-weight: 600;
+                padding: 4px 10px;
+                border-radius: var(--radius-sm);
+                display: inline-block;
+            }
+
+            .actuator-state.on {
+                background: #dcfce7;
+                color: #166534;
+            }
+
+            .actuator-state.off {
+                background: var(--color-canvas-soft);
+                color: var(--color-ink-mute-2);
+                border: 1px solid var(--color-hairline-cool);
             }
 
             @media (max-width: 768px) {
@@ -604,8 +599,40 @@
                 .camera-body { grid-template-columns: 1fr; }
                 .camera-side { display: grid; grid-template-columns: repeat(2, 1fr); }
                 .camera-controls { grid-column: 1 / -1; grid-template-columns: repeat(2, 1fr); }
-                .camera-url-form { grid-column: 1 / -1; }
                 .mqtt-debug-header { flex-direction: column; align-items: flex-start; }
+            }
+            .footer {
+                text-align: center;
+                padding: 28px 24px 16px;
+                border-top: 1px solid var(--color-hairline-cool);
+                margin-top: 8px;
+            }
+
+            .footer-label {
+                font-size: 10px;
+                font-weight: 600;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: var(--color-ink-faint);
+                margin-bottom: 14px;
+            }
+
+            .footer-names {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 6px 24px;
+            }
+
+            .footer-name {
+                font-size: 13px;
+                color: var(--color-ink-mute);
+                white-space: nowrap;
+            }
+
+            @media (max-width: 600px) {
+                .footer-names { gap: 4px 16px; }
+                .footer-name { font-size: 12px; }
             }
         </style>
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" onerror="console.warn('CDN Chart.js failed to load, falling back to local copy'); this.onerror=null; document.write('<script src=\'chart.umd.min.js\'><\/script>')"></script>
@@ -613,7 +640,7 @@
     <body>
         <div class="container">
             <header>
-                <h1>Sensor Dashboard</h1>
+                <h1>Automated Crayfish Farming System with Water Quality Monitoring and Control</h1>
                 <div class="header-subtitle">
                     <span class="status-indicator">
                         <span class="status-dot disconnected" id="statusDot"></span>
@@ -658,10 +685,7 @@
                             <div class="camera-stat-value" id="cameraDetectionCount">0</div>
                         </div>
                         <div class="camera-controls">
-                            <div class="camera-url-form">
-                                <input class="camera-url-input" id="cameraUrlInput" aria-label="Camera WebSocket URL" />
-                                <button class="camera-control-btn" id="cameraConnectBtn">Connect</button>
-                            </div>
+                            <button class="camera-control-btn" id="cameraConnectBtn">Reconnect</button>
                             <button class="camera-control-btn" id="cameraFitBtn">Mode: Fill</button>
                             <button class="camera-control-btn" id="cameraPauseBtn">Pause</button>
                         </div>
@@ -711,7 +735,7 @@
                 <div class="sensor-card">
                     <div class="sensor-info">
                         <div class="sensor-header">
-                            <span class="sensor-title">Air Quality</span>
+                            <span class="sensor-title">Ammonia Readings</span>
                             <span class="sensor-icon">💨</span>
                         </div>
                         <div class="sensor-reading">
@@ -767,38 +791,33 @@
 
             </div>
 
-            <section class="db-stats-section">
+            <section class="actuator-section" aria-label="Actuator status">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                     <div>
-                        <h3 style="font-size: 16px; font-weight: 500; color: var(--color-ink);">Database Statistics</h3>
-                        <p style="color: var(--color-ink-mute); font-size: 13px; margin-top: 4px;">Historical data from last 24 hours</p>
+                        <h3 style="font-size: 16px; font-weight: 500; color: var(--color-ink);">Actuator Status</h3>
+                        <p style="color: var(--color-ink-mute); font-size: 13px; margin-top: 4px;">Real-time state of pumps, valves, and lights</p>
                     </div>
-                    <button class="camera-control-btn" id="refreshDbStatsBtn">🔄 Refresh Stats</button>
                 </div>
-                <div class="db-stats-grid" id="dbStatsGrid">
-                    <div class="db-stat-item">
-                        <div class="db-stat-label">Total Readings</div>
-                        <div class="db-stat-value" id="dbTotalReadings">--</div>
+                <div class="actuator-grid">
+                    <div class="actuator-item">
+                        <div class="actuator-icon">💧</div>
+                        <div class="actuator-name">Pump</div>
+                        <div class="actuator-state off" id="actuatorPump">OFF</div>
                     </div>
-                    <div class="db-stat-item">
-                        <div class="db-stat-label">Turbidity (avg)</div>
-                        <div class="db-stat-value" id="dbTurbidityAvg">--</div>
+                    <div class="actuator-item">
+                        <div class="actuator-icon">🔧</div>
+                        <div class="actuator-name">Solenoid Valve</div>
+                        <div class="actuator-state off" id="actuatorValve">CLOSED</div>
                     </div>
-                    <div class="db-stat-item">
-                        <div class="db-stat-label">TDS (avg)</div>
-                        <div class="db-stat-value" id="dbTdsAvg">--</div>
+                    <div class="actuator-item">
+                        <div class="actuator-icon">⚙️</div>
+                        <div class="actuator-name">Servo</div>
+                        <div class="actuator-state off" id="actuatorServo">NORMAL</div>
                     </div>
-                    <div class="db-stat-item">
-                        <div class="db-stat-label">pH (avg)</div>
-                        <div class="db-stat-value" id="dbPhAvg">--</div>
-                    </div>
-                    <div class="db-stat-item">
-                        <div class="db-stat-label">Air Quality (avg)</div>
-                        <div class="db-stat-value" id="dbMqAvg">--</div>
-                    </div>
-                    <div class="db-stat-item">
-                        <div class="db-stat-label">Distance (avg)</div>
-                        <div class="db-stat-value" id="dbTofAvg">--</div>
+                    <div class="actuator-item">
+                        <div class="actuator-icon">☀️</div>
+                        <div class="actuator-name">UV Light</div>
+                        <div class="actuator-state off" id="actuatorUV">OFF</div>
                     </div>
                 </div>
             </section>
@@ -862,14 +881,25 @@
             </div>
 
             <div class="timestamp" id="timestamp"></div>
+
+            <footer class="footer">
+                <div class="footer-label">Developed by</div>
+                <div class="footer-names">
+                    <span class="footer-name">Andaya, Janiel Randel D.</span>
+                    <span class="footer-name">Catuera, Melvin J.</span>
+                    <span class="footer-name">Crueta, Al Samuel A.</span>
+                    <span class="footer-name">Dadivas, John Louis S.</span>
+                    <span class="footer-name">David, Lance B.</span>
+                    <span class="footer-name">Laceda, Jason S.</span>
+                </div>
+            </footer>
         </div>
 
         <script>
             // WebSocket Configuration
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsURL = `${protocol}//${window.location.host}`;
-            const cameraParams = new URLSearchParams(window.location.search);
-            let cameraWsURL = cameraParams.get('cameraWs') || `${protocol}//${window.location.hostname}:8766`;
+            let cameraWsURL = `ws://192.168.137.169:8766`; //THIS IP IS FOR DETECTION FOLDER WHICH IS MY LAPTOP'S IP
             const CAMERA_RECONNECT_DELAY_MS = 3000;
             let ws = null;
             let cameraWs = null;
@@ -890,11 +920,9 @@
             const cameraStatusText = document.getElementById('cameraStatusText');
             const cameraFrameCountEl = document.getElementById('cameraFrameCount');
             const cameraDetectionCountEl = document.getElementById('cameraDetectionCount');
-            const cameraUrlInput = document.getElementById('cameraUrlInput');
-            const cameraConnectBtn = document.getElementById('cameraConnectBtn');
-            const cameraFitBtn = document.getElementById('cameraFitBtn');
-            const cameraPauseBtn = document.getElementById('cameraPauseBtn');
-            cameraUrlInput.value = cameraWsURL;
+    const cameraConnectBtn = document.getElementById('cameraConnectBtn');
+    const cameraFitBtn = document.getElementById('cameraFitBtn');
+    const cameraPauseBtn = document.getElementById('cameraPauseBtn');
             const mqttDebugRefreshBtn = document.getElementById('mqttDebugRefreshBtn');
             const mqttDebugBroker = document.getElementById('mqttDebugBroker');
             const mqttDebugConnection = document.getElementById('mqttDebugConnection');
@@ -907,8 +935,8 @@
             // Alert thresholds
             const THRESHOLDS = {
                 turbidity: { dirty: 2000, clean: 2001 },
-                tds: { warning: 900 },
-                mq135: { warning: 90  },
+                tds: { warning: 1300 },
+                mq135: { warning: 3000 },
                 ph: { acidic: 6.0, alkaline: 7.59 }
             };
 
@@ -1035,8 +1063,6 @@
                             updateCount++;
                         } else if (message.type === 'mqtt_debug') {
                             updateMqttDebug(message.data);
-                        } else if (message.type === 'history') {
-                            processHistoryData(message.data);
                         }
                     } catch (error) {
                         console.error('Error parsing message:', error);
@@ -1101,6 +1127,9 @@
                 updateSensorStatus('mq135', data.mq135);
                 updateSensorStatus('ph', data.ph);
 
+                // Update actuators
+                updateActuators(data);
+
                 // Update charts in real-time from WebSocket data
                 Object.entries(CHART_CONFIG).forEach(([id, cfg]) => {
                     const chart = charts[id];
@@ -1131,77 +1160,21 @@
                 updateTimestamp();
             }
 
-            function processHistoryData(rows) {
-                if (!rows || rows.length === 0) {
-                    console.log('No history data available');
-                    return;
-                }
-                // Charts are now fed by the DB poll (fetchChartHistory)
-                // This function only updates the DB stats display
-                updateDbStats(rows);
-            }
+            function updateActuators(data) {
+                const actuators = [
+                    { id: 'actuatorPump', value: data.pump, onLabel: 'ON', offLabel: 'OFF' },
+                    { id: 'actuatorValve', value: data.valve, onLabel: 'OPEN', offLabel: 'CLOSED' },
+                    { id: 'actuatorServo', value: data.servo, onLabel: 'ACTIVE', offLabel: 'NORMAL' },
+                    { id: 'actuatorUV', value: data.uv, onLabel: 'ON', offLabel: 'OFF' },
+                ];
 
-            function updateDbStats(rows) {
-                if (!rows || rows.length === 0) {
-                    document.getElementById('dbTotalReadings').textContent = '0';
-                    return;
-                }
-
-                document.getElementById('dbTotalReadings').textContent = rows.length;
-
-                // Calculate averages per sensor
-                const stats = {};
-                rows.forEach(row => {
-                    if (!stats[row.sensor_name]) {
-                        stats[row.sensor_name] = { sum: 0, count: 0 };
-                    }
-                    stats[row.sensor_name].sum += row.value || 0;
-                    stats[row.sensor_name].count += 1;
+                actuators.forEach(({ id, value, onLabel, offLabel }) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const isOn = value && value !== 'OFF' && value !== 'CLOSED' && value !== 'NORMAL';
+                    el.textContent = isOn ? (value || onLabel) : offLabel;
+                    el.className = 'actuator-state ' + (isOn ? 'on' : 'off');
                 });
-
-                const avgMap = {
-                    'turbidity': 'dbTurbidityAvg',
-                    'tds': 'dbTdsAvg',
-                    'ph': 'dbPhAvg',
-                    'air_ppm': 'dbMqAvg',
-                    'distance': 'dbTofAvg'
-                };
-
-                Object.entries(avgMap).forEach(([sensor, elementId]) => {
-                    if (stats[sensor]) {
-                        const avg = stats[sensor].sum / stats[sensor].count;
-                        document.getElementById(elementId).textContent = avg.toFixed(2);
-                    }
-                });
-            }
-
-            async function refreshDbStats() {
-                try {
-                    const response = await fetch('/api/sensor-stats?hours=24');
-                    if (!response.ok) throw new Error('Failed to fetch stats');
-                    const data = await response.json();
-                    
-                    // Update stats display
-                    const totalReadings = data.reduce((sum, item) => sum + item.count, 0);
-                    document.getElementById('dbTotalReadings').textContent = totalReadings;
-                    
-                    data.forEach(item => {
-                        const avgMap = {
-                            'turbidity': 'dbTurbidityAvg',
-                            'tds': 'dbTdsAvg',
-                            'ph': 'dbPhAvg',
-                            'air_ppm': 'dbMqAvg',
-                            'distance': 'dbTofAvg'
-                        };
-                        const elementId = avgMap[item.sensor_name];
-                        if (elementId) {
-                            document.getElementById(elementId).textContent = 
-                                item.avg_value ? Number(item.avg_value).toFixed(2) : '--';
-                        }
-                    });
-                } catch (error) {
-                    console.error('Error refreshing DB stats:', error);
-                }
             }
 
             function updateSensorStatus(sensor, value) {
@@ -1217,9 +1190,11 @@
                         break;
                     case 'tds':
                         if (value >= THRESHOLDS.tds.warning) status = '⚠️ High TDS Alert';
+                        else status = 'Clean Water';
                         break;
                     case 'mq135':
                         if (value >= THRESHOLDS.mq135.warning) status = '⚠️ Poor Air Quality';
+                        else status = 'Clean Air';
                         break;
                     case 'ph':
                         if (value <= THRESHOLDS.ph.acidic) status = '🔴 Very Acidic';
@@ -1425,7 +1400,6 @@
             function connectCameraWebSocket(nextUrl) {
                 if (nextUrl) {
                     cameraWsURL = nextUrl;
-                    cameraUrlInput.value = cameraWsURL;
                 }
 
                 if (cameraReconnectTimer) {
@@ -1486,25 +1460,11 @@
             // Event Listeners
             document.getElementById('refreshBtn').addEventListener('click', requestSensorStatus);
             document.getElementById('loadHistoryBtn').addEventListener('click', requestHistory);
-            document.getElementById('refreshDbStatsBtn').addEventListener('click', refreshDbStats);
 
             cameraConnectBtn.addEventListener('click', () => {
-                const nextUrl = cameraUrlInput.value.trim();
-                if (!nextUrl) {
-                    setCameraPlaceholder('Enter a camera WebSocket URL.', true);
-                    updateCameraStatus('offline');
-                    return;
-                }
-
                 cameraFrameCount = 0;
                 cameraFrameCountEl.textContent = '0';
-                connectCameraWebSocket(nextUrl);
-            });
-
-            cameraUrlInput.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter') {
-                    cameraConnectBtn.click();
-                }
+                connectCameraWebSocket();
             });
 
             cameraFitBtn.addEventListener('click', () => {
@@ -1562,17 +1522,10 @@
                 charts[id] = initChart(id + 'Chart', cfg.color);
             });
 
-            // Start polling database for chart data every second
-            fetchChartHistory();
-            setInterval(fetchChartHistory, 1000);
-
             // Initialize
             sizeCameraCanvas();
             connectCameraWebSocket();
             connectWebSocket();
-
-            // Refresh DB stats on load
-            setTimeout(refreshDbStats, 1000);
         </script>
     </body>
-    </html> 
+    </html>

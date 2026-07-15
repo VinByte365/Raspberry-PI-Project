@@ -1,12 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import * as SQLite from 'expo-sqlite';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-
-// Replace this with your Raspberry Pi 5's actual network IP address.
-const RASPI_IP = '192.168.137.1';
-
-// WebSocket bridge URL for sensor data (bridge subscribes to MQTT on the Pi)
-const SENSOR_WS_URL = `ws://${RASPI_IP}:8767`;
+import { LineChart } from 'react-native-chart-kit';
 import {
   Pressable,
   SafeAreaView,
@@ -15,6 +11,12 @@ import {
   View,
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+
+// Replace this with your Raspberry Pi 5's actual network IP address.
+const RASPI_IP = '192.168.137.1';
+
+// WebSocket bridge URL for sensor data (bridge subscribes to MQTT on the Pi)
+const SENSOR_WS_URL = `ws://${RASPI_IP}:8767`;
 
 const WS_URL = `ws://${RASPI_IP}:8766`;
 const MQTT_WS_URL = `ws://${RASPI_IP}:9001`;
@@ -39,6 +41,99 @@ const MQTT_TOPICS = [
   'sensors/air/ppm',
   'sensors/water/distance',
 ];
+
+// ============ DATABASE SETUP (SQLite) ============
+let db: SQLite.SQLiteDatabase | null = null;
+
+async function initializeDatabase() {
+  try {
+    db = await SQLite.openDatabaseAsync('sensor_readings.db');
+    
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS sensor_readings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        sensor_name TEXT NOT NULL,
+        value REAL,
+        raw_value TEXT
+      );
+    `);
+    
+    console.log('[DB] Database initialized successfully');
+  } catch (error) {
+    console.error('[DB] Failed to initialize database:', error);
+  }
+}
+
+async function saveSensorReading(
+  topic: string,
+  payload: string,
+  sensorName: string,
+  numericValue: number | null
+) {
+  if (!db) return;
+  
+  try {
+    const timestamp = new Date().toISOString();
+    await db.runAsync(
+      `INSERT INTO sensor_readings (timestamp, topic, sensor_name, value, raw_value)
+       VALUES (?, ?, ?, ?, ?)`,
+      [timestamp, topic, sensorName, numericValue, payload]
+    );
+  } catch (error) {
+    console.error('[DB] Failed to save sensor reading:', error);
+  }
+}
+
+async function getSensorReadings(limit: number = 100) {
+  if (!db) return [];
+  
+  try {
+    const result = await db.getAllAsync(
+      `SELECT * FROM sensor_readings ORDER BY timestamp DESC LIMIT ?`,
+      [limit]
+    );
+    return result;
+  } catch (error) {
+    console.error('[DB] Failed to retrieve sensor readings:', error);
+    return [];
+  }
+}
+
+async function getSensorChartData(sensorName: string, limit: number = 24) {
+  if (!db) return null;
+  
+  try {
+    const readings = await db.getAllAsync(
+      `SELECT timestamp, value FROM sensor_readings 
+       WHERE sensor_name = ? 
+       ORDER BY timestamp ASC 
+       LIMIT ?`,
+      [sensorName, limit]
+    );
+    
+    if (readings.length === 0) return null;
+    
+    const labels = readings.map((r: any) => {
+      const date = new Date(r.timestamp);
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    });
+    
+    const data = readings.map((r: any) => r.value || 0);
+    
+    return {
+      labels: labels,
+      datasets: [{ data: data }],
+      legend: [sensorName]
+    };
+  } catch (error) {
+    console.error(`[DB] Failed to retrieve chart data for ${sensorName}:`, error);
+    return null;
+  }
+}
+
+// ============ HELPER FUNCTIONS ============
 
 const STREAM_HTML = `<!DOCTYPE html>
 <html>
@@ -232,6 +327,42 @@ const statusIcon: Record<ConnectionState, keyof typeof Ionicons.glyphMap> = {
   offline: 'alert-circle',
 };
 
+function updateLiveChartData(
+  sensorName: string,
+  value: number,
+  setLiveChartData: React.Dispatch<React.SetStateAction<Record<string, any>>>
+) {
+  setLiveChartData((prevData) => {
+    const sensorData = { ...prevData[sensorName] };
+    const labels = [...sensorData.labels];
+    const data = [...sensorData.datasets[0].data];
+
+    // Add new data point
+    const now = new Date();
+    const timeLabel = now.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    labels.push(timeLabel);
+    data.push(value);
+
+    // Keep only last 24 readings
+    if (labels.length > 24) {
+      labels.shift();
+      data.shift();
+    }
+
+    return {
+      ...prevData,
+      [sensorName]: {
+        labels,
+        datasets: [{ data }],
+      },
+    };
+  });
+}
+
 export default function CrayfishStreamDashboard() {
   const webViewRef = useRef<WebView>(null);
   const [connectionState, setConnectionState] =
@@ -248,6 +379,22 @@ export default function CrayfishStreamDashboard() {
     ph: '—',
     mq135: '—',
     tof: '—',
+  });
+  const [showCharts, setShowCharts] = useState(false);
+  const [chartData, setChartData] = useState<Record<string, any>>({
+    turbidity: null,
+    tds: null,
+    ph: null,
+    mq135: null,
+    tof: null,
+  });
+  // Real-time chart data (last 24 readings per sensor)
+  const [liveChartData, setLiveChartData] = useState<Record<string, any>>({
+    turbidity: { labels: [], datasets: [{ data: [] }] },
+    tds: { labels: [], datasets: [{ data: [] }] },
+    ph: { labels: [], datasets: [{ data: [] }] },
+    mq135: { labels: [], datasets: [{ data: [] }] },
+    tof: { labels: [], datasets: [{ data: [] }] },
   });
 
   const sendWebViewCommand = useCallback((command: object) => {
@@ -273,6 +420,11 @@ export default function CrayfishStreamDashboard() {
       return nextValue;
     });
   }, [sendWebViewCommand]);
+
+  // Initialize database on component mount
+  useEffect(() => {
+    initializeDatabase();
+  }, []);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -303,18 +455,29 @@ export default function CrayfishStreamDashboard() {
         const msg = JSON.parse(ev.data);
         const topic = msg.topic as string;
         const payload = String(msg.payload);
+        const numericValue = Number(payload) || 0;
 
         setSensorState((current) => {
           switch (topic) {
             case 'sensors/water/turbidity':
+              saveSensorReading(topic, payload, 'turbidity', numericValue);
+              updateLiveChartData('turbidity', numericValue, setLiveChartData);
               return { ...current, turbidity: payload };
             case 'sensors/water/tds':
+              saveSensorReading(topic, payload, 'tds', numericValue);
+              updateLiveChartData('tds', numericValue, setLiveChartData);
               return { ...current, tds: payload };
             case 'sensors/water/ph':
+              saveSensorReading(topic, payload, 'ph', numericValue);
+              updateLiveChartData('ph', numericValue, setLiveChartData);
               return { ...current, ph: payload };
             case 'sensors/air/ppm':
+              saveSensorReading(topic, payload, 'air_ppm', numericValue);
+              updateLiveChartData('mq135', numericValue, setLiveChartData);
               return { ...current, mq135: payload };
             case 'sensors/water/distance':
+              saveSensorReading(topic, payload, 'distance', numericValue);
+              updateLiveChartData('tof', numericValue, setLiveChartData);
               return { ...current, tof: payload };
             default:
               return current;
@@ -374,6 +537,41 @@ export default function CrayfishStreamDashboard() {
     }
   };
 
+  const exportSensorData = useCallback(async () => {
+    const readings = await getSensorReadings(1000);
+    console.log('[EXPORT] Sensor readings from database:', readings);
+    alert(`Exported ${readings.length} sensor readings. Check console logs.`);
+  }, []);
+
+  const loadChartData = useCallback(async () => {
+    try {
+      // Load initial data from database
+      const sensors = ['turbidity', 'tds', 'ph', 'mq135', 'tof'];
+      const newChartData: Record<string, any> = {};
+      
+      for (const sensor of sensors) {
+        newChartData[sensor] = await getSensorChartData(sensor, 24);
+      }
+      
+      // Initialize liveChartData with database values
+      setLiveChartData((prev) => {
+        const updated = { ...prev };
+        for (const sensor of sensors) {
+          if (newChartData[sensor]) {
+            updated[sensor] = newChartData[sensor];
+          }
+        }
+        return updated;
+      });
+      
+      setShowCharts(true);
+      console.log('[CHARTS] Charts opened, now tracking live updates');
+    } catch (error) {
+      console.error('[CHARTS] Failed to load chart data:', error);
+      alert('Failed to load chart data');
+    }
+  }, []);
+
   const video = (
     <WebView
       ref={webViewRef}
@@ -419,6 +617,16 @@ export default function CrayfishStreamDashboard() {
         label={isFullscreen ? 'Exit' : 'Full'}
         onPress={isFullscreen ? exitFullscreen : enterFullscreen}
       />
+      <IconButton
+        icon="download"
+        label="Export Data"
+        onPress={exportSensorData}
+      />
+      <IconButton
+        icon="bar-chart"
+        label="Charts"
+        onPress={loadChartData}
+      />
     </View>
   );
 
@@ -431,6 +639,146 @@ export default function CrayfishStreamDashboard() {
           {controls}
         </View>
       </View>
+    );
+  }
+
+  if (showCharts) {
+    return (
+      <SafeAreaView style={styles.page}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.logo}>📊 Sensor Charts</Text>
+            <Text style={styles.tagline}>Last 24 readings</Text>
+          </View>
+          <IconButton
+            icon="close"
+            label="Close"
+            onPress={() => setShowCharts(false)}
+          />
+        </View>
+
+        <View style={styles.chartsContainer}>
+          {liveChartData.turbidity?.datasets?.[0]?.data?.length > 0 && (
+            <View style={styles.chartWrapper}>
+              <Text style={styles.chartTitle}>💧 Turbidity (ADC)</Text>
+              <LineChart
+                data={liveChartData.turbidity}
+                width={360}
+                height={220}
+                chartConfig={{
+                  backgroundColor: '#10151b',
+                  backgroundGradientFrom: '#10151b',
+                  backgroundGradientTo: '#1a1f26',
+                  color: (opacity = 1) => `rgba(159, 247, 194, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(152, 168, 184, ${opacity})`,
+                  style: { borderRadius: 12 },
+                  propsForBackgroundLines: {
+                    strokeDasharray: '0',
+                    stroke: '#334155',
+                  },
+                }}
+                style={styles.lineChart}
+              />
+            </View>
+          )}
+          
+          {liveChartData.tds?.datasets?.[0]?.data?.length > 0 && (
+            <View style={styles.chartWrapper}>
+              <Text style={styles.chartTitle}>🧂 TDS (ppm)</Text>
+              <LineChart
+                data={liveChartData.tds}
+                width={360}
+                height={220}
+                chartConfig={{
+                  backgroundColor: '#10151b',
+                  backgroundGradientFrom: '#10151b',
+                  backgroundGradientTo: '#1a1f26',
+                  color: (opacity = 1) => `rgba(96, 165, 250, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(152, 168, 184, ${opacity})`,
+                  style: { borderRadius: 12 },
+                  propsForBackgroundLines: {
+                    strokeDasharray: '0',
+                    stroke: '#334155',
+                  },
+                }}
+                style={styles.lineChart}
+              />
+            </View>
+          )}
+
+          {liveChartData.ph?.datasets?.[0]?.data?.length > 0 && (
+            <View style={styles.chartWrapper}>
+              <Text style={styles.chartTitle}>⚗️ pH Level</Text>
+              <LineChart
+                data={liveChartData.ph}
+                width={360}
+                height={220}
+                chartConfig={{
+                  backgroundColor: '#10151b',
+                  backgroundGradientFrom: '#10151b',
+                  backgroundGradientTo: '#1a1f26',
+                  color: (opacity = 1) => `rgba(168, 85, 247, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(152, 168, 184, ${opacity})`,
+                  style: { borderRadius: 12 },
+                  propsForBackgroundLines: {
+                    strokeDasharray: '0',
+                    stroke: '#334155',
+                  },
+                }}
+                style={styles.lineChart}
+              />
+            </View>
+          )}
+
+          {liveChartData.mq135?.datasets?.[0]?.data?.length > 0 && (
+            <View style={styles.chartWrapper}>
+              <Text style={styles.chartTitle}>💨 Air Quality (ppm)</Text>
+              <LineChart
+                data={liveChartData.mq135}
+                width={360}
+                height={220}
+                chartConfig={{
+                  backgroundColor: '#10151b',
+                  backgroundGradientFrom: '#10151b',
+                  backgroundGradientTo: '#1a1f26',
+                  color: (opacity = 1) => `rgba(251, 146, 60, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(152, 168, 184, ${opacity})`,
+                  style: { borderRadius: 12 },
+                  propsForBackgroundLines: {
+                    strokeDasharray: '0',
+                    stroke: '#334155',
+                  },
+                }}
+                style={styles.lineChart}
+              />
+            </View>
+          )}
+
+          {liveChartData.tof?.datasets?.[0]?.data?.length > 0 && (
+            <View style={styles.chartWrapper}>
+              <Text style={styles.chartTitle}>📏 Distance (mm)</Text>
+              <LineChart
+                data={liveChartData.tof}
+                width={360}
+                height={220}
+                chartConfig={{
+                  backgroundColor: '#10151b',
+                  backgroundGradientFrom: '#10151b',
+                  backgroundGradientTo: '#1a1f26',
+                  color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(152, 168, 184, ${opacity})`,
+                  style: { borderRadius: 12 },
+                  propsForBackgroundLines: {
+                    strokeDasharray: '0',
+                    stroke: '#334155',
+                  },
+                }}
+                style={styles.lineChart}
+              />
+            </View>
+          )}
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -716,5 +1064,27 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     top: 16,
+  },
+  chartsContainer: {
+    flex: 1,
+    paddingHorizontal: 6,
+  },
+  chartWrapper: {
+    backgroundColor: '#18212a',
+    borderColor: '#263442',
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 16,
+    padding: 12,
+  },
+  chartTitle: {
+    color: '#f2f7fb',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  lineChart: {
+    borderRadius: 12,
+    marginLeft: -30,
   },
 });

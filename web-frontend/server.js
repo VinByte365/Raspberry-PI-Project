@@ -27,10 +27,19 @@ const SERIAL_PORT = process.env.SERIAL_PORT || 'COM3';
 const SERIAL_BAUD = parseInt(process.env.SERIAL_BAUD || '115200');
 const WS_PORT = process.env.WS_PORT || 8080;
 const SENSOR_UPDATE_INTERVAL = parseInt(process.env.SENSOR_UPDATE_INTERVAL || '500');
-const MQTT_BROKER = process.env.MQTT_BROKER || 'localhost';
+const MQTT_BROKER = process.env.MQTT_BROKER || '192.168.137.149';
 const MQTT_PORT = parseInt(process.env.MQTT_PORT || '1883');
 const MQTT_USERNAME = process.env.MQTT_USERNAME || '';
 const MQTT_PASSWORD = process.env.MQTT_PASSWORD || '';
+const MQTT_TOPICS = [
+  'sensors/water/turbidity',
+  'sensors/water/tds',
+  'sensors/water/ph',
+  'sensors/water/distance',
+  'sensors/air/ppm',
+  'sensors/air/label',
+  'status/#',
+];
 
 // Middleware
 app.use(cors());
@@ -89,41 +98,13 @@ let latestSensorData = {
   mq135: 0,
   ph: 0,
   tof: 0,
-  relay_pump: false,
-  relay_solenoid: false,
-  relay_uv: false,
-  servo_angle: 0,
+  pump: 'OFF',
+  valve: 'CLOSED',
+  servo: 'NORMAL',
+  uv: 'OFF',
   air_label: '',
   connected: false,
   error: null
-};
-
-// MQTT debug tracking
-let mqttDebugData = {
-  broker: MQTT_BROKER,
-  port: MQTT_PORT,
-  connected: false,
-  connectCount: 0,
-  reconnectCount: 0,
-  messageCount: 0,
-  lastTopic: null,
-  lastPayload: null,
-  lastMessageAt: null,
-  lastError: null,
-  subscriptionError: null,
-  subscribedTopics: [],
-  configuredTopics: [
-    'sensors/water/turbidity',
-    'sensors/water/tds',
-    'sensors/water/ph',
-    'sensors/water/distance',
-    'sensors/air/ppm',
-    'sensors/air/label'
-  ],
-  recentMessages: [],
-  serverTime: null,
-  lastConnectAt: null,
-  lastDisconnectAt: null
 };
 
 // Track connected WebSocket clients
@@ -135,6 +116,60 @@ let parser = null;
 let isConnected = false;
 let mqttClient = null;
 let mqttConnected = false;
+let mqttDebug = {
+  broker: MQTT_BROKER,
+  port: MQTT_PORT,
+  connected: false,
+  configuredTopics: MQTT_TOPICS,
+  subscribedTopics: [],
+  connectCount: 0,
+  reconnectCount: 0,
+  messageCount: 0,
+  lastConnectAt: null,
+  lastDisconnectAt: null,
+  lastMessageAt: null,
+  lastTopic: null,
+  lastPayload: null,
+  lastError: null,
+  subscriptionError: null,
+  recentMessages: [],
+};
+
+function getMqttDebugPayload() {
+  return {
+    ...mqttDebug,
+    connected: mqttConnected,
+    clientPresent: Boolean(mqttClient),
+    serverTime: new Date().toISOString(),
+  };
+}
+
+function broadcastMqttDebug() {
+  const payload = JSON.stringify({
+    type: 'mqtt_debug',
+    data: getMqttDebugPayload()
+  });
+
+  connectedClients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(payload);
+    }
+  });
+}
+
+function recordMqttMessage(topic, payload) {
+  mqttDebug.messageCount += 1;
+  mqttDebug.lastMessageAt = new Date().toISOString();
+  mqttDebug.lastTopic = topic;
+  mqttDebug.lastPayload = payload;
+  mqttDebug.lastError = null;
+  mqttDebug.recentMessages.unshift({
+    topic,
+    payload,
+    timestamp: mqttDebug.lastMessageAt,
+  });
+  mqttDebug.recentMessages = mqttDebug.recentMessages.slice(0, 8);
+}
 
 function initializeMqttClient() {
   if (mqttClient) {
@@ -160,35 +195,25 @@ function initializeMqttClient() {
 
   mqttClient.on('connect', () => {
     mqttConnected = true;
+    mqttDebug.connected = true;
+    mqttDebug.connectCount += 1;
+    mqttDebug.lastConnectAt = new Date().toISOString();
+    mqttDebug.lastError = null;
+    mqttDebug.subscriptionError = null;
     latestSensorData.connected = true;
     latestSensorData.error = null;
     
-    // Update MQTT debug
-    mqttDebugData.connected = true;
-    mqttDebugData.connectCount += 1;
-    mqttDebugData.lastConnectAt = new Date().toISOString();
-    mqttDebugData.lastError = null;
-    
     console.log(`[MQTT] Connected to ${MQTT_BROKER}:${MQTT_PORT}`);
 
-    const topics = [
-      'sensors/water/turbidity',
-      'sensors/water/tds',
-      'sensors/water/ph',
-      'sensors/water/distance',
-      'sensors/air/ppm',
-      'sensors/air/label',
-    ];
-
-    mqttClient.subscribe(topics, (err) => {
+    mqttClient.subscribe(MQTT_TOPICS, (err, granted) => {
       if (err) {
+        mqttDebug.subscriptionError = err.message;
         console.error('[MQTT] Subscription failed:', err);
-        mqttDebugData.subscriptionError = err.message;
       } else {
+        mqttDebug.subscribedTopics = (granted || []).map((item) => item.topic);
         console.log('[MQTT] Subscribed to ESP32 sensor topics');
-        mqttDebugData.subscribedTopics = topics;
-        mqttDebugData.subscriptionError = null;
       }
+      broadcastMqttDebug();
     });
 
     broadcastSensorData();
@@ -198,25 +223,11 @@ function initializeMqttClient() {
   mqttClient.on('message', (topic, message) => {
     try {
       const payload = message.toString().trim();
+      recordMqttMessage(topic, payload);
       const timestamp = new Date().toISOString();
       latestSensorData.timestamp = timestamp;
       latestSensorData.connected = true;
       latestSensorData.error = null;
-
-      // Update MQTT debug
-      mqttDebugData.messageCount += 1;
-      mqttDebugData.lastTopic = topic;
-      mqttDebugData.lastPayload = payload;
-      mqttDebugData.lastMessageAt = timestamp;
-      mqttDebugData.recentMessages.push({
-        timestamp: timestamp,
-        topic: topic,
-        payload: payload
-      });
-      if (mqttDebugData.recentMessages.length > 20) {
-        mqttDebugData.recentMessages.shift();
-      }
-      mqttDebugData.serverTime = new Date().toISOString();
 
       let numericValue = null;
       let sensorName = null;
@@ -252,6 +263,12 @@ function initializeMqttClient() {
           latestSensorData.air_label = payload;
           break;
         default:
+          if (topic.startsWith('status/')) {
+            const actuator = topic.split('/')[1];
+            if (['pump', 'valve', 'servo', 'uv'].includes(actuator)) {
+              latestSensorData[actuator] = payload;
+            }
+          }
           break;
       }
 
@@ -262,33 +279,36 @@ function initializeMqttClient() {
       broadcastSensorData();
       broadcastMqttDebug();
     } catch (error) {
+      mqttDebug.lastError = error.message;
       console.error('[MQTT] Error handling message:', error);
-      mqttDebugData.lastError = error.message;
+      broadcastMqttDebug();
     }
   });
 
   mqttClient.on('error', (err) => {
     mqttConnected = false;
+    mqttDebug.connected = false;
+    mqttDebug.lastError = err.message;
     latestSensorData.connected = false;
     latestSensorData.error = err.message;
-    mqttDebugData.connected = false;
-    mqttDebugData.lastError = err.message;
     console.error('[MQTT] Error:', err);
     broadcastSensorData();
     broadcastMqttDebug();
   });
 
   mqttClient.on('reconnect', () => {
+    mqttDebug.reconnectCount += 1;
+    mqttDebug.lastError = 'Reconnecting to MQTT broker';
     console.log('[MQTT] Reconnecting...');
-    mqttDebugData.reconnectCount += 1;
+    broadcastMqttDebug();
   });
 
   mqttClient.on('close', () => {
     mqttConnected = false;
+    mqttDebug.connected = false;
+    mqttDebug.lastDisconnectAt = new Date().toISOString();
     latestSensorData.connected = false;
     latestSensorData.error = 'MQTT connection closed';
-    mqttDebugData.connected = false;
-    mqttDebugData.lastDisconnectAt = new Date().toISOString();
     console.log('[MQTT] Connection closed');
     broadcastSensorData();
     broadcastMqttDebug();
@@ -299,19 +319,6 @@ function broadcastSensorData() {
   const message = JSON.stringify({
     type: 'sensor_update',
     data: latestSensorData
-  });
-  
-  connectedClients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
-    }
-  });
-}
-
-function broadcastMqttDebug() {
-  const message = JSON.stringify({
-    type: 'mqtt_debug',
-    data: mqttDebugData
   });
   
   connectedClients.forEach((client) => {
@@ -350,11 +357,9 @@ wss.on('connection', (ws) => {
     type: 'sensor_update',
     data: latestSensorData
   }));
-
-  // Send MQTT debug data
   ws.send(JSON.stringify({
     type: 'mqtt_debug',
-    data: mqttDebugData
+    data: getMqttDebugPayload()
   }));
 
   // Send historical data from DB
@@ -373,6 +378,11 @@ wss.on('connection', (ws) => {
         }));
       } else if (parsedMessage.type === 'request_history') {
         broadcastHistoryData(ws);
+      } else if (parsedMessage.type === 'request_mqtt_debug') {
+        ws.send(JSON.stringify({
+          type: 'mqtt_debug',
+          data: getMqttDebugPayload()
+        }));
       } else if (parsedMessage.type === 'relay_control') {
         const command = parsedMessage.payload;
         if (mqttClient && mqttConnected) {
@@ -539,7 +549,7 @@ app.get('/api/status', (req, res) => {
 
 // MQTT Debug endpoint
 app.get('/api/mqtt-debug', (req, res) => {
-  res.json(mqttDebugData);
+  res.json(getMqttDebugPayload());
 });
 
 // Health check endpoint
