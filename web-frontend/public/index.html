@@ -1424,7 +1424,7 @@
                 } catch (error) {
                     console.warn('[Camera] Failed to create WebSocket:', error);
                     updateCameraStatus('offline');
-                    setCameraPlaceholder(`Camera unavailable at ${cameraWsURL}. Retrying...`, true);
+                    setCameraPlaceholder(`Retrying...`, true);
                     scheduleCameraReconnect();
                     return;
                 }
@@ -1451,8 +1451,8 @@
                 cameraWs.onclose = () => {
                     updateCameraStatus('reconnecting');
                     if (!cameraLastImage) {
-                        setCameraPlaceholder(`Reconnecting to ${cameraWsURL}...`, true);
-                    }
+                        setCameraPlaceholder(`Reconnecting...`, true);
+                    }   
                     scheduleCameraReconnect();
                 };
             }
